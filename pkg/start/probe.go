@@ -214,7 +214,7 @@ func (p *Probe) trackPeer(ctx context.Context, peerID peer.ID) error {
 
 	dbPeer, err := models.Peers(qm.Expr(
 		models.PeerWhere.MultiHash.EQ(peerID.String()),
-		models.PeerWhere.TargetType.EQ(p.target.Type()),
+		models.PeerWhere.TargetName.EQ(p.target.Name()),
 	)).One(ctx, txn)
 	if err != nil && !errors.Is(err, sql.ErrNoRows) {
 		return errors.Wrap(err, "query peer from db")
