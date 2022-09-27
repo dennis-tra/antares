@@ -13,6 +13,8 @@ import (
 	kaddht "github.com/libp2p/go-libp2p-kad-dht"
 	"github.com/libp2p/go-libp2p/core/host"
 	"github.com/libp2p/go-libp2p/core/peer"
+	ma "github.com/multiformats/go-multiaddr"
+	manet "github.com/multiformats/go-multiaddr/net"
 	"github.com/pkg/errors"
 	log "github.com/sirupsen/logrus"
 	"github.com/volatiletech/null/v8"
@@ -151,14 +153,23 @@ func (p *Probe) trackPeer(ctx context.Context, peerID peer.ID) error {
 		agentVersion = val.(string)
 	}
 
-	maddrs := ps.Addrs(peerID)
-	maddrStrs := make([]string, len(maddrs))
+	maddrSet := goset.NewSet(ps.Addrs(peerID)...)
+	for _, conn := range p.host.Network().ConnsToPeer(peerID) {
+		maddrSet.Add(conn.RemoteMultiaddr())
+	}
+
+	maddrStrs := make([]string, maddrSet.Len())
 
 	ipAddressesSet := goset.NewSet[string]()
 	countriesSet := goset.NewSet[string]()
 	continentsSet := goset.NewSet[string]()
 	asnsSet := goset.NewSet[int64]()
-	for i, maddr := range maddrs {
+
+	for i, maddr := range maddrSet.Items() {
+		if isRelayedMaddr(maddr) || !manet.IsPublicAddr(maddr) {
+			continue
+		}
+
 		maddrStrs[i] = maddr.String()
 		maddrInfos, err := p.mmc.MaddrInfo(ctx, maddr)
 		if err != nil {
@@ -172,6 +183,11 @@ func (p *Probe) trackPeer(ctx context.Context, peerID peer.ID) error {
 			asnsSet.Add(int64(maddrInfo.ASN))
 		}
 	}
+
+	ipAddressesSet.Discard("")
+	countriesSet.Discard("")
+	continentsSet.Discard("")
+	asnsSet.Discard(0)
 
 	ipAddresses := ipAddressesSet.Items()
 	countries := countriesSet.Items()
@@ -251,4 +267,16 @@ func (p *Probe) trackPeer(ctx context.Context, peerID peer.ID) error {
 	}
 
 	return nil
+}
+
+func isRelayedMaddr(maddr ma.Multiaddr) bool {
+	_, err := maddr.ValueForProtocol(ma.P_CIRCUIT)
+	if err == nil {
+		return true
+	} else if errors.Is(err, ma.ErrProtocolNotFound) {
+		return false
+	} else {
+		log.WithError(err).WithField("maddr", maddr).Warnln("Unexpected error while parsing multi address")
+		return false
+	}
 }

@@ -21,6 +21,7 @@ var StartCommand = &cli.Command{
 // via the DHT and then requests that content through gateways and pinning services.
 func StartAction(c *cli.Context) error {
 	log.Infoln("Starting Antares...")
+	defer log.Infoln("Stopped Antares!")
 
 	// Load configuration file
 	conf, err := config.Init(c)
