@@ -153,24 +153,27 @@ func (p *Probe) trackPeer(ctx context.Context, peerID peer.ID) error {
 		agentVersion = val.(string)
 	}
 
-	maddrSet := goset.NewSet(ps.Addrs(peerID)...)
+	maddrSet := map[string]ma.Multiaddr{}
+	for _, maddr := range ps.Addrs(peerID) {
+		maddrSet[maddr.String()] = maddr
+	}
 	for _, conn := range p.host.Network().ConnsToPeer(peerID) {
-		maddrSet.Add(conn.RemoteMultiaddr())
+		maddr := conn.RemoteMultiaddr()
+		maddrSet[maddr.String()] = maddr
 	}
 
-	maddrStrs := make([]string, maddrSet.Len())
-
+	maddrStrs := []string{}
 	ipAddressesSet := goset.NewSet[string]()
 	countriesSet := goset.NewSet[string]()
 	continentsSet := goset.NewSet[string]()
 	asnsSet := goset.NewSet[int64]()
 
-	for i, maddr := range maddrSet.Items() {
+	for maddrStr, maddr := range maddrSet {
 		if isRelayedMaddr(maddr) || !manet.IsPublicAddr(maddr) {
 			continue
 		}
 
-		maddrStrs[i] = maddr.String()
+		maddrStrs = append(maddrStrs, maddrStr)
 		maddrInfos, err := p.mmc.MaddrInfo(ctx, maddr)
 		if err != nil {
 			continue
