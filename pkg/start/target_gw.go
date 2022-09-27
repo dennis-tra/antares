@@ -43,7 +43,7 @@ func (g *Gateway) Operation(ctx context.Context, c cid.Cid) backoff.Operation {
 	return func() error {
 		u := strings.ReplaceAll(g.urlFmt, GatewayURLReplaceStr, c.String())
 
-		logEntry.WithField("url", u).Infoln("Requesting CID from Gateway")
+		logEntry.WithField("url", u).Infoln("Requesting cid from Gateway")
 		req, err := http.NewRequestWithContext(ctx, http.MethodGet, u, nil)
 		if err != nil {
 			return errors.Wrap(err, "new request")
@@ -52,6 +52,7 @@ func (g *Gateway) Operation(ctx context.Context, c cid.Cid) backoff.Operation {
 		if err != nil {
 			return errors.Wrap(err, "request do")
 		}
+		defer resp.Body.Close()
 
 		if resp.StatusCode < 200 || resp.StatusCode > 299 {
 			return fmt.Errorf("status code %d", resp.StatusCode)
@@ -102,7 +103,7 @@ func (g *Gateway) Type() string {
 	return "gateway"
 }
 
-func (g *Gateway) CleanUp() {
+func (g *Gateway) CleanUp(c cid.Cid) {
 }
 
 func (g *Gateway) logEntry() *log.Entry {

@@ -62,7 +62,7 @@ type Target interface {
 	Rate() time.Duration
 	Name() string
 	Type() string
-	CleanUp()
+	CleanUp(c cid.Cid)
 }
 
 // NewScheduler TODO
@@ -98,6 +98,8 @@ func NewScheduler(ctx context.Context, conf *config.Config, dbc *db.Client, mmc 
 	for name, url := range GatewayTargets {
 		targets = append(targets, NewGatewayTarget(name, url))
 	}
+
+	targets = append(targets, NewPinata(h, conf.Authorizations["pinata"]))
 
 	s := &Scheduler{
 		host:    h,

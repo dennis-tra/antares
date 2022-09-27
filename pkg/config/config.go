@@ -52,7 +52,8 @@ var DefaultConfig = Config{
 		User:     "antares",
 		SSLMode:  "disable",
 	},
-	PrivKeyRaw: nil,
+	PrivKeyRaw:     nil,
+	Authorizations: map[string]string{},
 }
 
 // Config contains general user configuration.
@@ -116,6 +117,9 @@ type Config struct {
 
 	// TODO
 	PrivKey crypto.PrivKey `json:"-"`
+
+	// TODO
+	Authorizations map[string]string
 }
 
 // Init takes the command line argument and tries to read the config file from that directory.

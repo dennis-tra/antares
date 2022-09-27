@@ -93,7 +93,7 @@ func (p *Probe) probeTarget(ctx context.Context) error {
 			cancel()
 		}
 	}()
-	defer p.target.CleanUp()
+	defer p.target.CleanUp(block.Cid())
 
 	select {
 	case peerID := <-chPeerID:
