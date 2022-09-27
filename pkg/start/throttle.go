@@ -20,7 +20,7 @@ func NewThrottle(x int, duration time.Duration) *Throttle {
 
 		now := time.Now()
 
-		for i := 0; i < x-1; i++ {
+		for i := 0; i < x; i++ {
 			ch <- now
 		}
 
