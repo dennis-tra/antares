@@ -47,7 +47,7 @@ func (i *Infura) Operation(ctx context.Context, c cid.Cid) backoff.Operation {
 		logEntry.Infoln("Pinning cid to Infura...")
 		req, err := http.NewRequest(http.MethodPost, "https://ipfs.infura.io:5001/api/v0/pin/add?arg=/ipfs/"+c.String(), nil)
 		if err != nil {
-			return errors.Wrap(err, "new infura http request")
+			return errors.Wrap(err, "new request")
 		}
 		req.SetBasicAuth(i.username, i.password)
 
@@ -59,9 +59,9 @@ func (i *Infura) Operation(ctx context.Context, c cid.Cid) backoff.Operation {
 
 		respBody, err := io.ReadAll(resp.Body)
 		if err != nil {
-			return errors.Wrap(err, "read request body")
+			return errors.Wrap(err, "read response body")
 		}
-		logEntry.Debugln(string(respBody))
+		logEntry.Debugln("Pin response:", string(respBody))
 
 		if !utils.IsSuccessStatusCode(resp) {
 			return fmt.Errorf("status code %d", resp.StatusCode)
@@ -104,6 +104,8 @@ func (i *Infura) CleanUp(c cid.Cid) backoff.Operation {
 	logEntry := i.logEntry().WithField("cid", c)
 
 	return func() error {
+		logEntry.Debugln("Unpinning cid from Infura...")
+
 		req, err := http.NewRequest(http.MethodPost, "https://ipfs.infura.io:5001/api/v0/pin/rm?arg=/ipfs/"+c.String(), nil)
 		if err != nil {
 			return errors.Wrap(err, "new infura http request")
@@ -112,21 +114,18 @@ func (i *Infura) CleanUp(c cid.Cid) backoff.Operation {
 
 		resp, err := http.DefaultClient.Do(req)
 		if err != nil {
-			logEntry.WithError(err).Warnln("Error unpinning cid from infura")
-			return errors.Wrap(err, "infura delete request")
+			return errors.Wrap(err, "unpin cid from infura")
 		}
 		defer resp.Body.Close()
 
 		respBody, err := io.ReadAll(resp.Body)
 		if err != nil {
-			logEntry.WithError(err).Warnln("read all")
-			return errors.Wrap(err, "reading infura delete response body")
+			return errors.Wrap(err, "read response body")
 		}
-		logEntry.Debugln(string(respBody))
+		logEntry.Debugln("Unpin response:", string(respBody))
 
 		if !utils.IsSuccessStatusCode(resp) {
-			logEntry.WithField("status", resp.StatusCode).Warnln("Error unpinning cid from infura")
-			return errors.Wrap(err, "infura delete non-success status code")
+			return fmt.Errorf("status code %d", resp.StatusCode)
 		}
 
 		return nil

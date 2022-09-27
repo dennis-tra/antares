@@ -54,6 +54,8 @@ var _ Target = (*Pinata)(nil)
 func (p *Pinata) Operation(ctx context.Context, c cid.Cid) backoff.Operation {
 	logEntry := p.logEntry().WithField("cid", c)
 	return func() error {
+		logEntry.Infoln("Pinning cid to Pinata...")
+
 		var publicMaddr ma.Multiaddr
 		for _, maddr := range p.h.Addrs() {
 			if manet.IsPublicAddr(maddr) {
@@ -71,20 +73,18 @@ func (p *Pinata) Operation(ctx context.Context, c cid.Cid) backoff.Operation {
 		payload := PinataRequest{
 			HashToPin: c.String(),
 			PinataMetadata: &PinataMetadata{
-				Name: "Antares",
+				Name: "Antares " + time.Now().String(),
 			},
 			PinataOptions: popts,
 		}
 		data, err := json.Marshal(payload)
 		if err != nil {
-			return errors.Wrap(err, "marshal pinata request payload")
+			return errors.Wrap(err, "marshal request payload")
 		}
 
-		logEntry.Infoln("Pinning cid to Pinata...")
-		fmt.Println(string(data))
 		req, err := http.NewRequest(http.MethodPost, "https://api.pinata.cloud/pinning/pinByHash", bytes.NewBuffer(data))
 		if err != nil {
-			return errors.Wrap(err, "new pinata http request")
+			return errors.Wrap(err, "new request")
 		}
 		req.Header.Add("Authorization", "Bearer "+p.auth)
 		req.Header.Add("Content-Type", "application/json")
@@ -97,9 +97,9 @@ func (p *Pinata) Operation(ctx context.Context, c cid.Cid) backoff.Operation {
 
 		respBody, err := io.ReadAll(resp.Body)
 		if err != nil {
-			return errors.Wrap(err, "read request body")
+			return errors.Wrap(err, "read response body")
 		}
-		fmt.Println(string(respBody))
+		logEntry.Debugln("Pin response:", string(respBody))
 
 		if !utils.IsSuccessStatusCode(resp) {
 			return fmt.Errorf("status code %d", resp.StatusCode)
@@ -139,34 +139,33 @@ func (p *Pinata) Type() string {
 }
 
 func (p *Pinata) CleanUp(c cid.Cid) backoff.Operation {
+	logEntry := p.logEntry().WithField("cid", c)
+
 	return func() error {
-		logEntry := p.logEntry().WithField("cid", c)
+		logEntry.Infoln("Unpinning cid from Pinata...")
 
 		req, err := http.NewRequest(http.MethodDelete, "https://api.pinata.cloud/pinning/unpin/"+c.String(), nil)
 		if err != nil {
-			p.logEntry().WithError(err).WithField("cid", c).Warnln("Error creating request object to unpin cid from pinata")
-			return errors.Wrap(err, "new pinata delete request")
+			return errors.Wrap(err, "new request")
 		}
 		req.Header.Add("Authorization", "Bearer "+p.auth)
 
 		resp, err := http.DefaultClient.Do(req)
 		if err != nil {
-			logEntry.WithError(err).Warnln("Error unpinning cid from pinata")
-			return errors.Wrap(err, "pinata delete request")
+			return errors.Wrap(err, "unpin cid from pinata")
 		}
 		defer resp.Body.Close()
 
 		respBody, err := io.ReadAll(resp.Body)
 		if err != nil {
-			logEntry.WithError(err).Warnln("read all")
-			return errors.Wrap(err, "reading pinata delete response body")
+			return errors.Wrap(err, "read response body")
 		}
-		fmt.Println(string(respBody))
+		logEntry.Debugln("Unpin response:", string(respBody))
 
 		if !utils.IsSuccessStatusCode(resp) {
-			logEntry.WithField("status", resp.StatusCode).Warnln("Error unpinning cid from pinata")
-			return errors.Wrap(err, "pinata delete non-success status code")
+			return fmt.Errorf("status code %d", resp.StatusCode)
 		}
+
 		return nil
 	}
 }

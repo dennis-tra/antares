@@ -94,7 +94,7 @@ func (p *Probe) probeTarget(ctx context.Context) error {
 		}
 	}()
 	defer func() {
-		if err := backoff.Retry(p.target.CleanUp(block.Cid()), p.target.Backoff(ctx)); err != nil {
+		if err := backoff.Retry(p.target.CleanUp(block.Cid()), p.target.Backoff(ctx)); err != nil && !utils.IsContextErr(err) {
 			logEntry.WithError(err).Warnln("Error cleaning up resources")
 		}
 	}()

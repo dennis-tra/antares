@@ -64,13 +64,13 @@ func (t *Tracer) MessageReceived(id peer.ID, msg message.BitSwapMessage) {
 
 		select {
 		case ch <- id:
-			log.WithField("peerID", id).WithField("cid", e.Cid).Debugln("Tracer delivered matched message")
+			log.WithField("peerID", id).WithField("cid", e.Cid).Traceln("Tracer delivered matched message")
 		default:
-			log.WithField("peerID", id).WithField("cid", e.Cid).Warnln("Tracer dropped matched message")
+			log.WithField("peerID", id).WithField("cid", e.Cid).Traceln("Tracer dropped matched message")
 		}
 	}
 }
 
 func (t *Tracer) MessageSent(id peer.ID, msg message.BitSwapMessage) {
-	log.WithField("peerID", id).WithField("size", msg.Size()).Debugln("Sent Bitswap message")
+	log.WithField("peerID", id).WithField("size", msg.Size()).Traceln("Sent Bitswap message")
 }
