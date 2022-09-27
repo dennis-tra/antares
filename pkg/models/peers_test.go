@@ -568,7 +568,7 @@ func testPeersSelect(t *testing.T) {
 }
 
 var (
-	peerDBTypes = map[string]string{`ID`: `bigint`, `MultiHash`: `text`, `AgentVersion`: `text`, `Protocols`: `ARRAYtext`, `MultiAddresses`: `ARRAYtext`, `IPAddresses`: `ARRAYtext`, `Countries`: `ARRAYtext`, `Continents`: `ARRAYtext`, `Asns`: `ARRAYsmallint`, `TargetType`: `text`, `TargetName`: `text`, `LastSeenAt`: `timestamp with time zone`, `UpdatedAt`: `timestamp with time zone`, `CreatedAt`: `timestamp with time zone`}
+	peerDBTypes = map[string]string{`ID`: `bigint`, `MultiHash`: `text`, `AgentVersion`: `text`, `Protocols`: `ARRAYtext`, `MultiAddresses`: `ARRAYtext`, `IPAddresses`: `ARRAYtext`, `Countries`: `ARRAYtext`, `Continents`: `ARRAYtext`, `Asns`: `ARRAYinteger`, `TargetType`: `text`, `TargetName`: `text`, `LastSeenAt`: `timestamp with time zone`, `UpdatedAt`: `timestamp with time zone`, `CreatedAt`: `timestamp with time zone`}
 	_           = bytes.MinRead
 )
 

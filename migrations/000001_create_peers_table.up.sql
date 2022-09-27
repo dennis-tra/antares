@@ -18,7 +18,7 @@ CREATE TABLE peers
     -- An array of continents that the IP addresses could be associated with
     continents      TEXT[] NOT NULL,
     -- An array of autonomous system numbers that the IP addresses could be associated with
-    asns            SMALLINT[] NOT NULL,
+    asns            INT[] NOT NULL,
     -- Type of the target, e.g., gateway or pinning service
     target_type     TEXT        NOT NULL,
     -- Name of the target, e.g., ipfs.io
