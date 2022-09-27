@@ -149,7 +149,7 @@ func (p *Probe) trackPeer(ctx context.Context, peerID peer.ID) error {
 	}
 
 	var agentVersion string
-	if val, err := ps.Get(peerID, "AgentVersion"); err != nil {
+	if val, err := ps.Get(peerID, "AgentVersion"); err == nil {
 		agentVersion = val.(string)
 	}
 
