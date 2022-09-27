@@ -78,9 +78,9 @@ func (g *Gateway) Operation(ctx context.Context, c cid.Cid) backoff.Operation {
 
 func (g *Gateway) Backoff(ctx context.Context) backoff.BackOff {
 	bo := &backoff.ExponentialBackOff{
-		InitialInterval:     5 * time.Second,
+		InitialInterval:     30 * time.Second,
 		RandomizationFactor: 0.5,
-		Multiplier:          1.5,
+		Multiplier:          1.2,
 		MaxInterval:         2 * time.Minute,
 		MaxElapsedTime:      10 * time.Minute,
 		Stop:                backoff.Stop,
@@ -90,7 +90,7 @@ func (g *Gateway) Backoff(ctx context.Context) backoff.BackOff {
 }
 
 func (g *Gateway) Rate() time.Duration {
-	return time.Minute
+	return 2 * time.Minute
 }
 
 func (g *Gateway) Timeout() time.Duration {

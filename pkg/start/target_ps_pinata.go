@@ -111,10 +111,10 @@ func (p *Pinata) Operation(ctx context.Context, c cid.Cid) backoff.Operation {
 
 func (p *Pinata) Backoff(ctx context.Context) backoff.BackOff {
 	bo := &backoff.ExponentialBackOff{
-		InitialInterval:     5 * time.Second,
+		InitialInterval:     time.Minute,
 		RandomizationFactor: 0.5,
-		Multiplier:          1.5,
-		MaxInterval:         2 * time.Minute,
+		Multiplier:          1.2,
+		MaxInterval:         5 * time.Minute,
 		MaxElapsedTime:      10 * time.Minute,
 		Stop:                backoff.Stop,
 		Clock:               backoff.SystemClock,
@@ -123,11 +123,11 @@ func (p *Pinata) Backoff(ctx context.Context) backoff.BackOff {
 }
 
 func (p *Pinata) Rate() time.Duration {
-	return time.Minute
+	return 5 * time.Minute
 }
 
 func (p *Pinata) Timeout() time.Duration {
-	return 15 * time.Minute
+	return 10 * time.Minute
 }
 
 func (p *Pinata) Name() string {
