@@ -73,11 +73,11 @@ func (p *Probe) probeTarget(ctx context.Context) error {
 	}
 	logEntry := p.logEntry().WithField("cid", block.Cid())
 
-	logEntry.Infoln("Registering CID with tracer")
+	logEntry.Infoln("Registering cid with tracer")
 	chPeerID := p.tracer.Register(block.Cid())
 	defer p.tracer.Unregister(block.Cid())
 
-	logEntry.Infoln("Providing CID in the DHT")
+	logEntry.Infoln("Providing cid in the dht")
 	err = p.dht.Provide(ctx, block.Cid(), true)
 	if err != nil {
 		return errors.Wrap(err, "dht provide content")
@@ -97,7 +97,7 @@ func (p *Probe) probeTarget(ctx context.Context) error {
 
 	select {
 	case peerID := <-chPeerID:
-		logEntry.WithField("peerID", peerID).Infoln("Tracking peer that requested CID")
+		logEntry.WithField("peerID", peerID).Infoln("Tracking peer that requested cid")
 		return p.trackPeer(ctx, peerID)
 	case <-tCtx.Done():
 		return nil
