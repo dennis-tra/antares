@@ -13,6 +13,8 @@ import (
 	"github.com/ipfs/go-cid"
 	"github.com/pkg/errors"
 	log "github.com/sirupsen/logrus"
+
+	"github.com/dennis-tra/antares/pkg/utils"
 )
 
 const GatewayURLReplaceStr = "{cid}"
@@ -54,7 +56,7 @@ func (g *Gateway) Operation(ctx context.Context, c cid.Cid) backoff.Operation {
 		}
 		defer resp.Body.Close()
 
-		if resp.StatusCode < 200 || resp.StatusCode > 299 {
+		if !utils.IsSuccessStatusCode(resp) {
 			return fmt.Errorf("status code %d", resp.StatusCode)
 		}
 
@@ -103,7 +105,8 @@ func (g *Gateway) Type() string {
 	return "gateway"
 }
 
-func (g *Gateway) CleanUp(c cid.Cid) {
+func (g *Gateway) CleanUp(c cid.Cid) backoff.Operation {
+	return func() error { return nil }
 }
 
 func (g *Gateway) logEntry() *log.Entry {

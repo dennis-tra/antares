@@ -1,6 +1,7 @@
 package db
 
 import (
+	"context"
 	"database/sql"
 	"fmt"
 
@@ -51,11 +52,9 @@ func InitClient(conf *config.Config) (*Client, error) {
 		return nil, errors.Wrap(err, "pinging database")
 	}
 
-	return &Client{
-		dbh: dbh,
-	}, nil
+	return &Client{dbh}, nil
 }
 
-func (c *Client) Handle() *sql.DB {
-	return c.dbh
+func (c *Client) BeginTx(ctx context.Context, opts *sql.TxOptions) (*sql.Tx, error) {
+	return c.dbh.BeginTx(ctx, opts)
 }

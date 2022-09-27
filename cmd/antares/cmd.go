@@ -97,7 +97,7 @@ func main() {
 				Value:       2003,
 			},
 			&cli.BoolFlag{
-				Name:    "db-dry-run",
+				Name:    "dry-run",
 				Usage:   "Don't persist anything to a database (you don't need a running DB)",
 				EnvVars: []string{"ANTARES_DATABASE_DRY_RUN"},
 			},

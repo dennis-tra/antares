@@ -6,6 +6,8 @@ import (
 	"sort"
 	"time"
 
+	"github.com/dennis-tra/antares/pkg/utils"
+
 	"github.com/amit7itz/goset"
 	"github.com/cenkalti/backoff/v4"
 	blocks "github.com/ipfs/go-block-format"
@@ -55,9 +57,7 @@ func (p *Probe) run(ctx context.Context) {
 		}
 
 		err := p.probeTarget(ctx)
-		if errors.Is(err, context.Canceled) {
-			return
-		} else if errors.Is(err, context.DeadlineExceeded) {
+		if utils.IsContextErr(err) {
 			return
 		} else if err != nil {
 			p.logEntry().WithError(err).Warnln("Error probing target")
@@ -88,12 +88,16 @@ func (p *Probe) probeTarget(ctx context.Context) error {
 	go func() {
 		logEntry.Infoln("Starting probe operation")
 		err = backoff.RetryNotify(p.target.Operation(tCtx, block.Cid()), p.target.Backoff(tCtx), p.notify)
-		if err != nil && !errors.Is(err, context.Canceled) && !errors.Is(err, context.DeadlineExceeded) {
+		if err != nil && !utils.IsContextErr(err) {
 			logEntry.Infoln("Probe operation failed")
 			cancel()
 		}
 	}()
-	defer p.target.CleanUp(block.Cid())
+	defer func() {
+		if err := backoff.Retry(p.target.CleanUp(block.Cid()), p.target.Backoff(ctx)); err != nil {
+			logEntry.WithError(err).Warnln("Error cleaning up resources")
+		}
+	}()
 
 	select {
 	case peerID := <-chPeerID:
@@ -169,7 +173,7 @@ func (p *Probe) trackPeer(ctx context.Context, peerID peer.ID) error {
 	asnsSet := goset.NewSet[int64]()
 
 	for maddrStr, maddr := range maddrSet {
-		if isRelayedMaddr(maddr) || !manet.IsPublicAddr(maddr) {
+		if utils.IsRelayedMaddr(maddr) || !manet.IsPublicAddr(maddr) {
 			continue
 		}
 
@@ -202,7 +206,7 @@ func (p *Probe) trackPeer(ctx context.Context, peerID peer.ID) error {
 	sort.Strings(continents)
 	sort.Slice(asns, func(i, j int) bool { return asns[i] < asns[j] })
 
-	txn, err := p.dbc.Handle().BeginTx(ctx, nil)
+	txn, err := p.dbc.BeginTx(ctx, nil)
 	if err != nil {
 		return errors.Wrap(err, "begin txn")
 	}
@@ -270,16 +274,4 @@ func (p *Probe) trackPeer(ctx context.Context, peerID peer.ID) error {
 	}
 
 	return nil
-}
-
-func isRelayedMaddr(maddr ma.Multiaddr) bool {
-	_, err := maddr.ValueForProtocol(ma.P_CIRCUIT)
-	if err == nil {
-		return true
-	} else if errors.Is(err, ma.ErrProtocolNotFound) {
-		return false
-	} else {
-		log.WithError(err).WithField("maddr", maddr).Warnln("Unexpected error while parsing multi address")
-		return false
-	}
 }

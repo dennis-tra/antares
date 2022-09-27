@@ -237,8 +237,8 @@ func (c *Config) apply(ctx *cli.Context) {
 	if ctx.IsSet("prom-port") {
 		c.Prometheus.Port = ctx.Int("prom-port")
 	}
-	if ctx.IsSet("db-dry-run") {
-		c.Database.DryRun = ctx.Bool("db-dry-run")
+	if ctx.IsSet("dry-run") {
+		c.Database.DryRun = ctx.Bool("dry-run")
 	}
 	if ctx.IsSet("db-host") {
 		c.Database.Host = ctx.String("db-host")

@@ -2,14 +2,9 @@ package start
 
 import (
 	"context"
-	"time"
 
-	"github.com/dennis-tra/antares/pkg/maxmind"
-
-	"github.com/cenkalti/backoff/v4"
 	"github.com/ipfs/go-bitswap"
 	bsnet "github.com/ipfs/go-bitswap/network"
-	"github.com/ipfs/go-cid"
 	"github.com/ipfs/go-datastore"
 	dssync "github.com/ipfs/go-datastore/sync"
 	blockstore "github.com/ipfs/go-ipfs-blockstore"
@@ -23,6 +18,7 @@ import (
 
 	"github.com/dennis-tra/antares/pkg/config"
 	"github.com/dennis-tra/antares/pkg/db"
+	"github.com/dennis-tra/antares/pkg/maxmind"
 )
 
 // The Scheduler TODO
@@ -53,16 +49,6 @@ type Scheduler struct {
 
 	// TODO
 	targets []Target
-}
-
-type Target interface {
-	Backoff(ctx context.Context) backoff.BackOff
-	Operation(ctx context.Context, c cid.Cid) backoff.Operation
-	Timeout() time.Duration
-	Rate() time.Duration
-	Name() string
-	Type() string
-	CleanUp(c cid.Cid)
 }
 
 // NewScheduler TODO
@@ -99,7 +85,12 @@ func NewScheduler(ctx context.Context, conf *config.Config, dbc *db.Client, mmc 
 		targets = append(targets, NewGatewayTarget(name, url))
 	}
 
-	targets = append(targets, NewPinata(h, conf.Authorizations["pinata"]))
+	targets = append(targets, NewPinata(h, conf))
+	i, err := NewInfura(h, conf)
+	if err != nil {
+		return nil, errors.Wrap(err, "new infura target")
+	}
+	targets = append(targets, i)
 
 	s := &Scheduler{
 		host:    h,
