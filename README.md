@@ -31,7 +31,7 @@ A gateway and pinning service probing tool. It allows you to track information a
 Antares is a command line tool and just provides the `start` sub command. To simply start tracking run:
 
 ```shell
-antares crawl --dry-run
+antares start --dry-run
 ```
 
 Usually results are persisted in a postgres database - the `--dry-run` flag prevents it from doing that and prints them to the console.

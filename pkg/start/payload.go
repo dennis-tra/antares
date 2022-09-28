@@ -1,6 +1,7 @@
 package start
 
 import (
+	"crypto/rand"
 	"encoding/json"
 	"time"
 
@@ -13,13 +14,21 @@ import (
 type Payload struct {
 	Message   string
 	Timestamp time.Time
+	Random    []byte
 	Signature []byte
 }
 
 func NewPayload(key crypto.PrivKey) (*Payload, error) {
+	buf := make([]byte, 100)
+	_, err := rand.Read(buf)
+	if err != nil {
+		return nil, errors.Wrap(err, "read random data")
+	}
+
 	p := &Payload{
 		Message:   "Antares Test Data",
 		Timestamp: time.Now(),
+		Random:    buf,
 		Signature: nil,
 	}
 

@@ -6,6 +6,11 @@ import (
 	"sort"
 	"time"
 
+	"go.opencensus.io/tag"
+
+	"github.com/dennis-tra/antares/pkg/metrics"
+	"go.opencensus.io/stats"
+
 	"github.com/ipfs/go-cid"
 
 	"github.com/dennis-tra/antares/pkg/utils"
@@ -32,19 +37,27 @@ import (
 )
 
 type Probe struct {
-	host   host.Host
-	dbc    *db.Client
-	mmc    *maxmind.Client
-	config *config.Config
-	dht    *kaddht.IpfsDHT
-	bstore blockstore.Blockstore
-	tracer *Tracer
-	target Target
-	done   chan struct{}
+	host       host.Host
+	dbc        *db.Client
+	mmc        *maxmind.Client
+	config     *config.Config
+	dht        *kaddht.IpfsDHT
+	bstore     blockstore.Blockstore
+	tracer     *Tracer
+	target     Target
+	probeCount int64
+	trackCount int64
+	done       chan struct{}
 }
 
 func (p *Probe) run(ctx context.Context) {
 	defer close(p.done)
+
+	ctx, err := tag.New(ctx, tag.Insert(metrics.KeyTargetName, p.target.Name()), tag.Insert(metrics.KeyTargetType, p.target.Type()))
+	if err != nil {
+		p.logEntry().WithError(err).Errorln("Error creating new tag context")
+		return
+	}
 
 	// Only request
 	throttle := NewThrottle(1, p.target.Rate())
@@ -75,6 +88,9 @@ func (p *Probe) run(ctx context.Context) {
 }
 
 func (p *Probe) probeTarget(ctx context.Context) error {
+	p.probeCount += 1
+	stats.Record(ctx, metrics.ProbeCount.M(p.probeCount))
+
 	block, teardown, err := p.generateContent(ctx)
 	defer teardown()
 	if err != nil {
@@ -160,6 +176,9 @@ func (p *Probe) generateContent(ctx context.Context) (*blocks.BasicBlock, func()
 }
 
 func (p *Probe) trackPeer(ctx context.Context, peerID peer.ID) error {
+	p.trackCount += 1
+	stats.Record(ctx, metrics.TrackCount.M(p.trackCount))
+
 	ps := p.host.Peerstore()
 
 	protocols, err := ps.GetProtocols(peerID)

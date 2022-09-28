@@ -4,6 +4,7 @@ import (
 	"github.com/dennis-tra/antares/pkg/config"
 	"github.com/dennis-tra/antares/pkg/db"
 	"github.com/dennis-tra/antares/pkg/maxmind"
+	"github.com/dennis-tra/antares/pkg/metrics"
 	"github.com/dennis-tra/antares/pkg/start"
 	"github.com/pkg/errors"
 	log "github.com/sirupsen/logrus"
@@ -43,7 +44,15 @@ func StartAction(c *cli.Context) error {
 		return err
 	}
 
-	// Initialize scheduler that handles crawling the network.
+	// Start prometheus metrics endpoint
+	if err = metrics.RegisterMetrics(); err != nil {
+		return errors.Wrap(err, "register metrics")
+	}
+	if err = metrics.ListenAndServe(conf.Prometheus.Host, conf.Prometheus.Port); err != nil {
+		return errors.Wrap(err, "initialize metrics")
+	}
+
+	// Initialize scheduler that handles probing the targets
 	s, err := start.NewScheduler(c.Context, conf, dbc, mmc)
 	if err != nil {
 		return errors.Wrap(err, "creating new scheduler")

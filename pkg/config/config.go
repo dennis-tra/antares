@@ -233,7 +233,6 @@ func read(path string) (*Config, error) {
 		return nil, err
 	} else {
 
-		// Initialize a single libp2p node that's shared between all crawlers.
 		conf.PrivKey, _, err = crypto.GenerateEd25519Key(rand.Reader)
 		if err != nil {
 			return nil, errors.Wrap(err, "generate key pair")
