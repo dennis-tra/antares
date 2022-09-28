@@ -6,6 +6,8 @@ import (
 	"sort"
 	"time"
 
+	"github.com/ipfs/go-cid"
+
 	"github.com/dennis-tra/antares/pkg/utils"
 
 	"github.com/amit7itz/goset"
@@ -87,14 +89,20 @@ func (p *Probe) probeTarget(ctx context.Context) error {
 	defer cancel()
 	go func() {
 		logEntry.Infoln("Starting probe operation")
-		err = backoff.RetryNotify(p.target.Operation(tCtx, block.Cid()), p.target.Backoff(tCtx), p.notify)
-		if err != nil && !utils.IsContextErr(err) {
+
+		op := backoffWrap(tCtx, block.Cid(), p.target.Operation)
+		bo := p.target.Backoff(tCtx)
+
+		if err = backoff.RetryNotify(op, bo, p.notify); err != nil && !utils.IsContextErr(err) {
 			logEntry.Infoln("Probe operation failed")
 			cancel()
 		}
 	}()
 	defer func() {
-		if err := backoff.Retry(p.target.CleanUp(block.Cid()), p.target.Backoff(ctx)); err != nil && !utils.IsContextErr(err) {
+		op := backoffWrap(tCtx, block.Cid(), p.target.CleanUp)
+		bo := p.target.Backoff(ctx)
+
+		if err := backoff.Retry(op, bo); err != nil && !utils.IsContextErr(err) {
 			logEntry.WithError(err).Warnln("Error cleaning up resources")
 		}
 	}()
@@ -274,4 +282,10 @@ func (p *Probe) trackPeer(ctx context.Context, peerID peer.ID) error {
 	}
 
 	return nil
+}
+
+func backoffWrap(ctx context.Context, c cid.Cid, fn func(context.Context, cid.Cid) error) backoff.Operation {
+	return func() error {
+		return fn(ctx, c)
+	}
 }

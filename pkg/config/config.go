@@ -52,8 +52,9 @@ var DefaultConfig = Config{
 		User:     "antares",
 		SSLMode:  "disable",
 	},
-	PrivKeyRaw:     nil,
-	Authorizations: map[string]string{},
+	PrivKeyRaw:      nil,
+	PinningServices: []PinningService{},
+	Gateways:        []Gateway{},
 }
 
 // Config contains general user configuration.
@@ -119,7 +120,20 @@ type Config struct {
 	PrivKey crypto.PrivKey `json:"-"`
 
 	// TODO
-	Authorizations map[string]string
+	PinningServices []PinningService
+
+	// TODO
+	Gateways []Gateway
+}
+
+type PinningService struct {
+	Target        string
+	Authorization string
+}
+
+type Gateway struct {
+	Name string
+	URL  string
 }
 
 // Init takes the command line argument and tries to read the config file from that directory.
@@ -186,9 +200,22 @@ func read(path string) (*Config, error) {
 		}
 		conf.Existed = true
 
-		conf.PrivKey, err = crypto.UnmarshalPrivateKey(conf.PrivKeyRaw)
-		if err != nil {
-			return nil, errors.Wrap(err, "unmarshal private key")
+		if len(conf.PrivKeyRaw) == 0 {
+			log.Infoln("Config found but generating new peer identity...")
+			conf.PrivKey, _, err = crypto.GenerateEd25519Key(rand.Reader)
+			if err != nil {
+				return nil, errors.Wrap(err, "generate key pair")
+			}
+
+			conf.PrivKeyRaw, err = crypto.MarshalPrivateKey(conf.PrivKey)
+			if err != nil {
+				return nil, errors.Wrap(err, "raw private key")
+			}
+		} else {
+			conf.PrivKey, err = crypto.UnmarshalPrivateKey(conf.PrivKeyRaw)
+			if err != nil {
+				return nil, errors.Wrap(err, "unmarshal private key")
+			}
 		}
 
 		conf.ListenAddrTCP, err = ma.NewMultiaddr(fmt.Sprintf("/ip4/%s/tcp/%d", conf.Host, conf.Port))
@@ -201,7 +228,7 @@ func read(path string) (*Config, error) {
 			return nil, errors.Wrap(err, "construct IPv4 QUIC address")
 		}
 
-		return &conf, nil
+		return &conf, conf.Save()
 	} else if !os.IsNotExist(err) {
 		return nil, err
 	} else {

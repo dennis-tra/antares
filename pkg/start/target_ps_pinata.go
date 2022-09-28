@@ -17,7 +17,6 @@ import (
 	"github.com/pkg/errors"
 	log "github.com/sirupsen/logrus"
 
-	"github.com/dennis-tra/antares/pkg/config"
 	"github.com/dennis-tra/antares/pkg/utils"
 )
 
@@ -26,6 +25,68 @@ const PinataTargetName = "pinata"
 type Pinata struct {
 	h    host.Host
 	auth string
+}
+
+func NewPinata(h host.Host, auth string) (Target, error) {
+	return &Pinata{h: h, auth: auth}, nil
+}
+
+var _ Target = (*Pinata)(nil)
+
+func (p *Pinata) Operation(ctx context.Context, c cid.Cid) error {
+	logEntry := p.logEntry().WithField("cid", c)
+	logEntry.Infoln("Pinning cid to Pinata...")
+
+	var publicMaddr ma.Multiaddr
+	for _, maddr := range p.h.Addrs() {
+		if manet.IsPublicAddr(maddr) {
+			publicMaddr = maddr
+			break
+		}
+	}
+	var popts *PinataOptions
+	if publicMaddr != nil {
+		popts = &PinataOptions{HostNodes: []string{
+			publicMaddr.String() + "/p2p/" + p.h.ID().String(),
+		}}
+	}
+
+	payload := PinataRequest{
+		HashToPin: c.String(),
+		PinataMetadata: &PinataMetadata{
+			Name: "Antares " + time.Now().String(),
+		},
+		PinataOptions: popts,
+	}
+	data, err := json.Marshal(payload)
+	if err != nil {
+		return errors.Wrap(err, "marshal request payload")
+	}
+
+	req, err := http.NewRequest(http.MethodPost, "https://api.pinata.cloud/pinning/pinByHash", bytes.NewBuffer(data))
+	if err != nil {
+		return errors.Wrap(err, "new request")
+	}
+	req.Header.Add("Authorization", "Bearer "+p.auth)
+	req.Header.Add("Content-Type", "application/json")
+
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return errors.Wrap(err, "pin file to pinata")
+	}
+	defer resp.Body.Close()
+
+	respBody, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return errors.Wrap(err, "read response body")
+	}
+	logEntry.Debugln("Pin response:", string(respBody))
+
+	if !utils.IsSuccessStatusCode(resp) {
+		return fmt.Errorf("status code %d", resp.StatusCode)
+	}
+
+	return nil
 }
 
 type PinataRequest struct {
@@ -40,73 +101,6 @@ type PinataMetadata struct {
 
 type PinataOptions struct {
 	HostNodes []string `json:"hostNodes"`
-}
-
-func NewPinata(h host.Host, conf *config.Config) *Pinata {
-	return &Pinata{
-		h:    h,
-		auth: conf.Authorizations[PinataTargetName],
-	}
-}
-
-var _ Target = (*Pinata)(nil)
-
-func (p *Pinata) Operation(ctx context.Context, c cid.Cid) backoff.Operation {
-	logEntry := p.logEntry().WithField("cid", c)
-	return func() error {
-		logEntry.Infoln("Pinning cid to Pinata...")
-
-		var publicMaddr ma.Multiaddr
-		for _, maddr := range p.h.Addrs() {
-			if manet.IsPublicAddr(maddr) {
-				publicMaddr = maddr
-				break
-			}
-		}
-		var popts *PinataOptions
-		if publicMaddr != nil {
-			popts = &PinataOptions{HostNodes: []string{
-				publicMaddr.String() + "/p2p/" + p.h.ID().String(),
-			}}
-		}
-
-		payload := PinataRequest{
-			HashToPin: c.String(),
-			PinataMetadata: &PinataMetadata{
-				Name: "Antares " + time.Now().String(),
-			},
-			PinataOptions: popts,
-		}
-		data, err := json.Marshal(payload)
-		if err != nil {
-			return errors.Wrap(err, "marshal request payload")
-		}
-
-		req, err := http.NewRequest(http.MethodPost, "https://api.pinata.cloud/pinning/pinByHash", bytes.NewBuffer(data))
-		if err != nil {
-			return errors.Wrap(err, "new request")
-		}
-		req.Header.Add("Authorization", "Bearer "+p.auth)
-		req.Header.Add("Content-Type", "application/json")
-
-		resp, err := http.DefaultClient.Do(req)
-		if err != nil {
-			return errors.Wrap(err, "pin file to pinata")
-		}
-		defer resp.Body.Close()
-
-		respBody, err := io.ReadAll(resp.Body)
-		if err != nil {
-			return errors.Wrap(err, "read response body")
-		}
-		logEntry.Debugln("Pin response:", string(respBody))
-
-		if !utils.IsSuccessStatusCode(resp) {
-			return fmt.Errorf("status code %d", resp.StatusCode)
-		}
-
-		return nil
-	}
 }
 
 func (p *Pinata) Backoff(ctx context.Context) backoff.BackOff {
@@ -138,36 +132,34 @@ func (p *Pinata) Type() string {
 	return "pinning-service"
 }
 
-func (p *Pinata) CleanUp(c cid.Cid) backoff.Operation {
+func (p *Pinata) CleanUp(ctx context.Context, c cid.Cid) error {
 	logEntry := p.logEntry().WithField("cid", c)
 
-	return func() error {
-		logEntry.Infoln("Unpinning cid from Pinata...")
+	logEntry.Infoln("Unpinning cid from Pinata...")
 
-		req, err := http.NewRequest(http.MethodDelete, "https://api.pinata.cloud/pinning/unpin/"+c.String(), nil)
-		if err != nil {
-			return errors.Wrap(err, "new request")
-		}
-		req.Header.Add("Authorization", "Bearer "+p.auth)
-
-		resp, err := http.DefaultClient.Do(req)
-		if err != nil {
-			return errors.Wrap(err, "unpin cid from pinata")
-		}
-		defer resp.Body.Close()
-
-		respBody, err := io.ReadAll(resp.Body)
-		if err != nil {
-			return errors.Wrap(err, "read response body")
-		}
-		logEntry.Debugln("Unpin response:", string(respBody))
-
-		if !utils.IsSuccessStatusCode(resp) {
-			return fmt.Errorf("status code %d", resp.StatusCode)
-		}
-
-		return nil
+	req, err := http.NewRequest(http.MethodDelete, "https://api.pinata.cloud/pinning/unpin/"+c.String(), nil)
+	if err != nil {
+		return errors.Wrap(err, "new request")
 	}
+	req.Header.Add("Authorization", "Bearer "+p.auth)
+
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return errors.Wrap(err, "unpin cid from pinata")
+	}
+	defer resp.Body.Close()
+
+	respBody, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return errors.Wrap(err, "read response body")
+	}
+	logEntry.Debugln("Unpin response:", string(respBody))
+
+	if !utils.IsSuccessStatusCode(resp) {
+		return fmt.Errorf("status code %d", resp.StatusCode)
+	}
+
+	return nil
 }
 
 func (p *Pinata) logEntry() *log.Entry {

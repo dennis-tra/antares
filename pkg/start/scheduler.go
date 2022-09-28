@@ -80,17 +80,10 @@ func NewScheduler(ctx context.Context, conf *config.Config, dbc *db.Client, mmc 
 	bstore := blockstore.NewBlockstore(ds)
 	bs := bitswap.New(ctx, network, bstore, bitswap.WithTracer(t))
 
-	targets := []Target{}
-	for name, url := range GatewayTargets {
-		targets = append(targets, NewGatewayTarget(name, url))
-	}
-
-	targets = append(targets, NewPinata(h, conf))
-	i, err := NewInfura(h, conf)
+	targets, err := initTargets(h, conf)
 	if err != nil {
-		return nil, errors.Wrap(err, "new infura target")
+		return nil, errors.Wrap(err, "init targets")
 	}
-	targets = append(targets, i)
 
 	s := &Scheduler{
 		host:    h,
@@ -105,6 +98,31 @@ func NewScheduler(ctx context.Context, conf *config.Config, dbc *db.Client, mmc 
 	}
 
 	return s, nil
+}
+
+func initTargets(h host.Host, conf *config.Config) ([]Target, error) {
+	var targets []Target
+
+	for _, gw := range conf.Gateways {
+		targets = append(targets, NewGatewayTarget(gw.Name, gw.URL))
+	}
+
+	for _, ps := range conf.PinningServices {
+		tc, found := PinningServiceTargetConstructors[ps.Target]
+		if !found {
+			log.Warnf("no pinning service constructor for target %s\n", ps.Target)
+			continue
+		}
+
+		pst, err := tc(h, ps.Authorization)
+		if err != nil {
+			return nil, errors.Wrapf(err, "constructing pinning service target: %s", ps.Target)
+		}
+
+		targets = append(targets, pst)
+	}
+
+	return targets, nil
 }
 
 func (s *Scheduler) StartProbes(ctx context.Context) error {
