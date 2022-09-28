@@ -143,11 +143,6 @@ func main() {
 				DefaultText: config.DefaultConfig.Database.SSLMode,
 				Value:       config.DefaultConfig.Database.SSLMode,
 			},
-			&cli.StringSliceFlag{
-				Name:    "bootstrap-peers",
-				Usage:   "Comma separated list of multi addresses of bootstrap peers",
-				EnvVars: []string{"ANTARES_BOOTSTRAP_PEERS"},
-			},
 		},
 		EnableBashCompletion: true,
 		Commands: []*cli.Command{
