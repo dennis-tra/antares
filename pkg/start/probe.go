@@ -221,6 +221,33 @@ func (p *Probe) trackPeer(ctx context.Context, peerID peer.ID) error {
 	sort.Strings(continents)
 	sort.Slice(asns, func(i, j int) bool { return asns[i] < asns[j] })
 
+	if p.config.Database.DryRun {
+		p.logEntry().Infoln("Skipping database interaction due to --dry-run flag")
+
+		p.logEntry().Infoln("Tracked the following peer:")
+		p.logEntry().Infoln("  PeerID", peerID.String())
+		p.logEntry().Infoln("  AgentVersion", agentVersion)
+		p.logEntry().Infoln("  Protocols", protocols)
+		for i, protocol := range protocols {
+			p.logEntry().Infof("    [%d] %s\n", i, protocol)
+		}
+		p.logEntry().Infoln("  MultiAddresses", maddrStrs)
+		for i, maddrStr := range maddrStrs {
+			p.logEntry().Infof("    [%d] %s\n", i, maddrStr)
+		}
+		p.logEntry().Infoln("  IPAddresses", ipAddresses)
+		for i, ipAddress := range ipAddresses {
+			p.logEntry().Infof("    [%d] %s\n", i, ipAddress)
+		}
+		p.logEntry().Infoln("  Countries", countries)
+		p.logEntry().Infoln("  Continents", continents)
+		p.logEntry().Infoln("  ASNs", asns)
+		p.logEntry().Infoln("  TargetType", p.target.Type())
+		p.logEntry().Infoln("  TargetName", p.target.Name())
+
+		return nil
+	}
+
 	txn, err := p.dbc.BeginTx(ctx, nil)
 	if err != nil {
 		return errors.Wrap(err, "begin txn")
