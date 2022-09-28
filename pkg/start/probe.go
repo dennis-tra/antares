@@ -51,6 +51,13 @@ func (p *Probe) run(ctx context.Context) {
 	defer throttle.Stop()
 
 	for {
+		// Giving cancelled context precedence
+		select {
+		case <-ctx.Done():
+			return
+		default:
+		}
+
 		p.logEntry().WithField("rate", p.target.Rate()).Infoln("Checking probe lease...")
 		select {
 		case <-ctx.Done():
