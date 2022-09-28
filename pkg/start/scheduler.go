@@ -101,7 +101,7 @@ func NewScheduler(ctx context.Context, conf *config.Config, dbc *db.Client, mmc 
 }
 
 func initTargets(h host.Host, conf *config.Config) ([]Target, error) {
-	var targets []Target
+	targets := []Target{NewDummyTarget()}
 
 	for _, gw := range conf.Gateways {
 		targets = append(targets, NewGatewayTarget(gw.Name, gw.URL))
