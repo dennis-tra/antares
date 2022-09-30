@@ -20,7 +20,7 @@ import (
 
 var (
 	// RawVersion and build tag of the
-	// PCP command line tool. This is
+	// Antares command line tool. This is
 	// replaced on build via e.g.:
 	// -ldflags "-X main.RawVersion=${VERSION}"
 	RawVersion  = "dev"
@@ -71,7 +71,7 @@ func main() {
 			&cli.IntFlag{
 				Name:        "port",
 				Usage:       "On which port should Antares listen on",
-				EnvVars:     []string{"ANTARES_Port"},
+				EnvVars:     []string{"ANTARES_PORT"},
 				DefaultText: strconv.Itoa(config.DefaultConfig.Port),
 				Value:       config.DefaultConfig.Port,
 			},

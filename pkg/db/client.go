@@ -6,18 +6,22 @@ import (
 	"fmt"
 
 	"contrib.go.opencensus.io/integrations/ocsql"
-
-	"github.com/dennis-tra/antares/pkg/config"
 	_ "github.com/lib/pq"
 	"github.com/pkg/errors"
 	log "github.com/sirupsen/logrus"
+
+	"github.com/dennis-tra/antares/pkg/config"
 )
 
+// Client abstracts away all database interactions.
+// TODO: it's not doing that yet
 type Client struct {
 	// Database handler
 	dbh *sql.DB
 }
 
+// InitClient establishes a new database connection based on the given configuration.
+// It is not carrying out migrations.
 func InitClient(conf *config.Config) (*Client, error) {
 	log.WithFields(log.Fields{
 		"host": conf.Database.Host,

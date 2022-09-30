@@ -11,6 +11,7 @@ import (
 	"github.com/pkg/errors"
 )
 
+// Payload is the underlying data that gets announced to the network
 type Payload struct {
 	Message   string
 	Timestamp time.Time
@@ -18,6 +19,8 @@ type Payload struct {
 	Signature []byte
 }
 
+// NewPayload generates 100 bytes of random data and initializes a Payload
+// data structure. It's also signing the data for no reason.
 func NewPayload(key crypto.PrivKey) (*Payload, error) {
 	buf := make([]byte, 100)
 	_, err := rand.Read(buf)
@@ -47,6 +50,8 @@ func NewPayload(key crypto.PrivKey) (*Payload, error) {
 	return p, nil
 }
 
+// Bytes returns the json representation of the data embedded into a
+// DAG node so that IPFS can make sense of the data.
 func (p *Payload) Bytes() ([]byte, error) {
 	dat, err := json.Marshal(p)
 	if err != nil {

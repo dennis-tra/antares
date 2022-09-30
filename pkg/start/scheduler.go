@@ -21,43 +21,50 @@ import (
 	"github.com/dennis-tra/antares/pkg/maxmind"
 )
 
-// The Scheduler TODO
+// The Scheduler is responsible for the initialization of Targets and Probes. Targets are entities like gateways
+// or pinning services. Probes can be configured with a specific Target and carry out the publication of content and
+// later the request through the Target. After all targets are initialized from the configuration, they get assigned
+// a Probe. These probes are then instructed to start doing their thing - which means, announcing CIDs to the DHT and
+// then requesting it through the associated target.
 type Scheduler struct {
-	// The libp2p node that's used to TODO
+	// The libp2p node that's used to announce CIDs to the DHT and handle the Bitswap exchange of the data. The Bitswap
+	// traffic is then used to detect who requested those CIDs.
 	host host.Host
 
-	// The database client
+	// A handle on the database to issue queries.
 	dbc *db.Client
 
-	// TODO
+	// A handle on the Maxmind GeoIP2 database to resolve IP addresses to country and continent information.
 	mmc *maxmind.Client
 
-	// The configuration of timeouts etc.
+	// A reference to the configuration of Antares
 	config *config.Config
 
-	// TODO
+	// A reference to the Kademlia DHT to be able to provide CIDs to the network.
 	dht *kaddht.IpfsDHT
 
-	// TODO
+	// The tracer is handed into the Bitswap exchange submodule and implements two methods that get called whenever
+	// a Bitswap message leaves the Antares libp2p host or is received by it.
 	tracer *Tracer
 
-	// TODO
-	bitswap *bitswap.Bitswap
-
-	// TODO
+	// A reference to the underlying blockstore that Bitswap uses to deliver the blocks that were previously advertised
+	// via their CID to the DHT
 	bstore blockstore.Blockstore
 
-	// TODO
+	// A list of Targets to probe.
 	targets []Target
 }
 
-// NewScheduler TODO
+// NewScheduler initializes a new libp2p host with the given configuration handles to a persistent storage and Maxmind
+// GeoIP2 database.
 func NewScheduler(ctx context.Context, conf *config.Config, dbc *db.Client, mmc *maxmind.Client) (*Scheduler, error) {
+	// TODO: Still haven't fully grasped how to properly configure the resource manager...
 	mgr, err := rcmgr.NewResourceManager(rcmgr.NewFixedLimiter(rcmgr.InfiniteLimits))
 	if err != nil {
 		return nil, errors.Wrap(err, "new resource manager")
 	}
 
+	// Initialize the libp2p host
 	var dht *kaddht.IpfsDHT
 	h, err := libp2p.New(
 		libp2p.Identity(conf.PrivKey),
@@ -73,40 +80,50 @@ func NewScheduler(ctx context.Context, conf *config.Config, dbc *db.Client, mmc 
 		return nil, errors.Wrap(err, "new libp2p host")
 	}
 
+	// Create a new tracer
 	t := NewTracer()
 
+	// Configure the Bitswap submodule
 	network := bsnet.NewFromIpfsHost(h, dht)
 	ds := dssync.MutexWrap(datastore.NewMapDatastore())
 	bstore := blockstore.NewBlockstore(ds)
-	bs := bitswap.New(ctx, network, bstore, bitswap.WithTracer(t))
 
+	// Register the bitswap protocol handler and start handling new messages, connectivity events, etc.
+	// This is the point were we hand in the tracer to be in the loop of what's going on.
+	bitswap.New(ctx, network, bstore, bitswap.WithTracer(t))
+
+	// Initialize all configured targets
 	targets, err := initTargets(h, conf)
 	if err != nil {
 		return nil, errors.Wrap(err, "init targets")
 	}
 
-	s := &Scheduler{
+	return &Scheduler{
 		host:    h,
 		dbc:     dbc,
 		mmc:     mmc,
 		config:  conf,
 		dht:     dht,
 		tracer:  t,
-		bitswap: bs,
 		bstore:  bstore,
 		targets: targets,
-	}
-
-	return s, nil
+	}, nil
 }
 
+// initTargets takes the current configuration options and constructs corresponding target data structures.
+// A Target is just the entity that we are probing to detect their PeerIDs and can be gateways or pinning services.
+// It always adds a dummy target. For each entry in the `Gateways` and `PinningServices` list it also
+// creates a corresponding target.
 func initTargets(h host.Host, conf *config.Config) ([]Target, error) {
+	// Always add the dummy target to detect peers that are proactively
 	targets := []Target{NewDummyTarget()}
 
+	// Add all configured gateways
 	for _, gw := range conf.Gateways {
 		targets = append(targets, NewGatewayTarget(gw.Name, gw.URL))
 	}
 
+	// Add all configured pinning services
 	for _, ps := range conf.PinningServices {
 		tc, found := PinningServiceTargetConstructors[ps.Target]
 		if !found {
@@ -125,7 +142,9 @@ func initTargets(h host.Host, conf *config.Config) ([]Target, error) {
 	return targets, nil
 }
 
+// StartProbes connects to the IPFS bootstrap peers and starts each target probe in their own go-routine.
 func (s *Scheduler) StartProbes(ctx context.Context) error {
+	// Connect to IPFS bootstrap peers
 	for _, bp := range kaddht.GetDefaultBootstrapPeerAddrInfos() {
 		log.WithField("peerID", bp.ID).Infoln("Connecting to bootstrap peer")
 		if err := s.host.Connect(ctx, bp); err != nil {
@@ -133,6 +152,7 @@ func (s *Scheduler) StartProbes(ctx context.Context) error {
 		}
 	}
 
+	// Start all probes
 	var probes []*Probe
 	for _, target := range s.targets {
 		log.Infof("Starting %s probe %s...", target.Type(), target.Name())
@@ -141,9 +161,11 @@ func (s *Scheduler) StartProbes(ctx context.Context) error {
 		go p.run(ctx)
 	}
 
+	// Block until the user wants to stop
 	log.WithField("count", len(s.targets)).Infoln("Initialized all target probes!")
 	<-ctx.Done()
 
+	// The user wanted to stop the program, wait until all probes have gracefully stopped
 	for _, p := range probes {
 		log.WithField("type", p.target.Type()).WithField("name", p.target.Name()).Infoln("Waiting for probe to stop")
 		<-p.done
