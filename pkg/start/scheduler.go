@@ -139,6 +139,22 @@ func initTargets(h host.Host, conf *config.Config) ([]Target, error) {
 		targets = append(targets, pst)
 	}
 
+	// Add all configured upload services
+	for _, ps := range conf.UploadServices {
+		tc, found := UploadServiceTargetConstructors[ps.Target]
+		if !found {
+			log.Warnf("no upload service constructor for target %s\n", ps.Target)
+			continue
+		}
+
+		pst, err := tc(h, ps.Authorization)
+		if err != nil {
+			return nil, errors.Wrapf(err, "constructing upload service target: %s", ps.Target)
+		}
+
+		targets = append(targets, pst)
+	}
+
 	return targets, nil
 }
 
