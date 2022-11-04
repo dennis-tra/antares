@@ -78,4 +78,10 @@
       legacyPackages = forAllSystems (system: nixpkgsFor.${system});
 
     };
+
+  nixConfig = {
+    extra-substituters = [ "https://cachix.cachix.org" ];
+    extra-trusted-public-keys =
+      [ "antares.cachix.org-1:K+ejStePHqJSv5zxrXunGTJLiR6WrkXKe3+dHiNw+6I=" ];
+  };
 }
