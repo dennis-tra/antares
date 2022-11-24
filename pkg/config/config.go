@@ -55,6 +55,7 @@ var DefaultConfig = Config{
 	PrivKeyRaw:      nil,
 	PinningServices: []PinningService{},
 	Gateways:        []Gateway{},
+	UploadServices:  []UploadService{},
 }
 
 // Config contains general user configuration.
@@ -124,6 +125,8 @@ type Config struct {
 
 	// TODO
 	Gateways []Gateway
+
+	UploadServices []UploadService
 }
 
 type PinningService struct {
@@ -134,6 +137,11 @@ type PinningService struct {
 type Gateway struct {
 	Name string
 	URL  string
+}
+
+type UploadService struct {
+	Target        string
+	Authorization string
 }
 
 // Init takes the command line argument and tries to read the config file from that directory.

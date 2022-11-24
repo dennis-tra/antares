@@ -91,21 +91,21 @@ func (p *Probe) probeTarget(ctx context.Context) error {
 	p.probeCount += 1
 	stats.Record(ctx, metrics.ProbeCount.M(p.probeCount))
 
-	block, teardown, err := p.generateContent(ctx)
+	// Generate Content on the target
+	contentID, teardown, err := p.getContent(ctx)
 	defer teardown()
 	if err != nil {
 		return errors.Wrap(err, "generate content")
 	}
-	logEntry := p.logEntry().WithField("cid", block.Cid())
+	logEntry := p.logEntry().WithField("cid", contentID)
 
 	logEntry.Infoln("Registering cid with tracer")
-	chPeerID := p.tracer.Register(block.Cid())
-	defer p.tracer.Unregister(block.Cid())
+	chPeerID := p.tracer.Register(*contentID)
+	defer p.tracer.Unregister(*contentID)
 
-	logEntry.Infoln("Providing cid in the dht")
-	err = p.dht.Provide(ctx, block.Cid(), true)
+	err = p.registerContent(ctx, contentID, logEntry)
 	if err != nil {
-		return errors.Wrap(err, "dht provide content")
+		return err
 	}
 
 	tCtx, cancel := context.WithTimeout(ctx, p.target.Timeout())
@@ -113,7 +113,7 @@ func (p *Probe) probeTarget(ctx context.Context) error {
 	go func() {
 		logEntry.Infoln("Starting probe operation")
 
-		op := backoffWrap(tCtx, block.Cid(), p.target.Operation)
+		op := backoffWrap(tCtx, *contentID, p.target.Operation)
 		bo := p.target.Backoff(tCtx)
 
 		if err = backoff.RetryNotify(op, bo, p.notify); err != nil && !utils.IsContextErr(err) {
@@ -122,7 +122,7 @@ func (p *Probe) probeTarget(ctx context.Context) error {
 		}
 	}()
 	defer func() {
-		op := backoffWrap(tCtx, block.Cid(), p.target.CleanUp)
+		op := backoffWrap(tCtx, *contentID, p.target.CleanUp)
 		bo := p.target.Backoff(ctx)
 
 		if err := backoff.Retry(op, bo); err != nil && !utils.IsContextErr(err) {
@@ -147,7 +147,33 @@ func (p *Probe) logEntry() *log.Entry {
 	return log.WithField("type", p.target.Type()).WithField("name", p.target.Name())
 }
 
-func (p *Probe) generateContent(ctx context.Context) (*blocks.BasicBlock, func(), error) {
+// Decide if content should be generated locally, and generate content
+func (p *Probe) getContent(ctx context.Context) (*cid.Cid, func(), error) {
+	switch p.target.(type) {
+	case ContentProvidingTarget:
+		return p.target.(ContentProvidingTarget).GenerateContent(ctx, p.config.PrivKey)
+	case Target:
+		return p.generateLocalContent(ctx)
+	}
+	return nil, nil, errors.New("Failed to generate content")
+}
+
+// Only register local node with content if is a local content
+func (p *Probe) registerContent(ctx context.Context, cid *cid.Cid, logEntry *log.Entry) error {
+	switch p.target.(type) {
+	case ContentProvidingTarget:
+		return nil
+	case Target:
+		logEntry.Infoln("Providing cid in the dht")
+		err := p.dht.Provide(ctx, *cid, true)
+		if err != nil {
+			return errors.Wrap(err, "dht provide content")
+		}
+	}
+	return nil
+}
+
+func (p *Probe) generateLocalContent(ctx context.Context) (*cid.Cid, func(), error) {
 	pl, err := NewPayload(p.config.PrivKey)
 	if err != nil {
 		return nil, nil, errors.Wrap(err, "new payload data")
@@ -167,7 +193,9 @@ func (p *Probe) generateContent(ctx context.Context) (*blocks.BasicBlock, func()
 		return nil, nil, errors.Wrap(err, "put block in blockstore")
 	}
 
-	return block, func() {
+	cid := block.Cid()
+
+	return &cid, func() {
 		logEntry.Infoln("Removing content from blockstore")
 		if err = p.bstore.DeleteBlock(ctx, block.Cid()); err != nil {
 			logEntry.WithError(err).Warnln("Could not delete block")
