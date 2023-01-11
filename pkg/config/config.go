@@ -55,6 +55,7 @@ var DefaultConfig = Config{
 	PrivKeyRaw:      nil,
 	PinningServices: []PinningService{},
 	Gateways:        []Gateway{},
+	UploadServices:  []UploadService{},
 }
 
 // Config contains general user configuration.
@@ -124,9 +125,16 @@ type Config struct {
 
 	// TODO
 	Gateways []Gateway
+
+	UploadServices []UploadService
 }
 
 type PinningService struct {
+	Target        string
+	Authorization string
+}
+
+type UploadService struct {
 	Target        string
 	Authorization string
 }
