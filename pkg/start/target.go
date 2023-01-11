@@ -17,6 +17,12 @@ var PinningServiceTargetConstructors = map[string]PinningServiceTargetConstructo
 	PinataTargetName: NewPinata,
 }
 
+type UploadServiceTargetConstructor = func(host host.Host, auth string) (UploadTarget, error)
+
+var UploadServiceTargetConstructors = map[string]UploadServiceTargetConstructor{
+	Web3TargetName: NewWeb3,
+}
+
 type Target interface {
 	Backoff(ctx context.Context) backoff.BackOff
 	Timeout() time.Duration

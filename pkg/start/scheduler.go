@@ -52,7 +52,7 @@ type Scheduler struct {
 	bstore blockstore.Blockstore
 
 	// A list of Targets to probe.
-	targets []PinTarget
+	targets []Target
 }
 
 // NewScheduler initializes a new libp2p host with the given configuration handles to a persistent storage and Maxmind
@@ -114,9 +114,9 @@ func NewScheduler(ctx context.Context, conf *config.Config, dbc *db.Client, mmc 
 // A Target is just the entity that we are probing to detect their PeerIDs and can be gateways or pinning services.
 // It always adds a dummy target. For each entry in the `Gateways` and `PinningServices` list it also
 // creates a corresponding target.
-func initTargets(h host.Host, conf *config.Config) ([]PinTarget, error) {
+func initTargets(h host.Host, conf *config.Config) ([]Target, error) {
 	// Always add the dummy target to detect peers that are proactively
-	targets := []PinTarget{NewDummyTarget()}
+	targets := []Target{NewDummyTarget()}
 
 	// Add all configured gateways
 	for _, gw := range conf.Gateways {
@@ -139,6 +139,22 @@ func initTargets(h host.Host, conf *config.Config) ([]PinTarget, error) {
 		targets = append(targets, pst)
 	}
 
+	for _, us := range conf.UploadServices {
+		tc, found := UploadServiceTargetConstructors[us.Target]
+		if !found {
+			log.Warnf("no upload service constructor for target %s\n", us.Target)
+			continue
+		}
+
+		ust, err := tc(h, us.Authorization)
+
+		if err != nil {
+			return nil, errors.Wrapf(err, "constructing pinning service target: %s", us.Target)
+		}
+
+		targets = append(targets, ust)
+	}
+
 	return targets, nil
 }
 
@@ -156,7 +172,13 @@ func (s *Scheduler) StartProbes(ctx context.Context) error {
 	var probes []Probe
 	for _, target := range s.targets {
 		log.Infof("Starting %s probe %s...", target.Type(), target.Name())
-		p := s.newProbe(target)
+		var p Probe
+		switch target.(type) {
+		case PinTarget:
+			p = s.newProbe(target.(PinTarget))
+		case UploadTarget:
+			p = s.newUploadProbe(target.(UploadTarget))
+		}
 		probes = append(probes, p)
 		go p.run(ctx)
 	}
@@ -183,6 +205,18 @@ func (s *Scheduler) newProbe(target PinTarget) *PinProbe {
 		dht:    s.dht,
 		bstore: s.bstore,
 		tracer: s.tracer,
+		target: target,
+		done:   make(chan struct{}),
+	}
+}
+
+func (s *Scheduler) newUploadProbe(target UploadTarget) *UploadProbe {
+	return &UploadProbe{
+		host:   s.host,
+		dbc:    s.dbc,
+		mmc:    s.mmc,
+		config: s.config,
+		dht:    s.dht,
 		target: target,
 		done:   make(chan struct{}),
 	}

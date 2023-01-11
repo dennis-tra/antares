@@ -36,7 +36,7 @@ func NewInfura(h host.Host, auth string) (PinTarget, error) {
 	}, nil
 }
 
-var _ Target = (*Infura)(nil)
+var _ PinTarget = (*Infura)(nil)
 
 func (i *Infura) Operation(ctx context.Context, c cid.Cid) error {
 	logEntry := i.logEntry().WithField("cid", c)
