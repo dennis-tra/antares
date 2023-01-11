@@ -2,7 +2,6 @@ package start
 
 import (
 	"context"
-	"database/sql"
 	"sort"
 	"time"
 
@@ -15,6 +14,9 @@ import (
 
 	"github.com/amit7itz/goset"
 	"github.com/cenkalti/backoff/v4"
+	"github.com/dennis-tra/antares/pkg/config"
+	"github.com/dennis-tra/antares/pkg/db"
+	"github.com/dennis-tra/antares/pkg/maxmind"
 	blocks "github.com/ipfs/go-block-format"
 	blockstore "github.com/ipfs/go-ipfs-blockstore"
 	kaddht "github.com/libp2p/go-libp2p-kad-dht"
@@ -24,17 +26,9 @@ import (
 	manet "github.com/multiformats/go-multiaddr/net"
 	"github.com/pkg/errors"
 	log "github.com/sirupsen/logrus"
-	"github.com/volatiletech/null/v8"
-	"github.com/volatiletech/sqlboiler/v4/boil"
-	"github.com/volatiletech/sqlboiler/v4/queries/qm"
-
-	"github.com/dennis-tra/antares/pkg/config"
-	"github.com/dennis-tra/antares/pkg/db"
-	"github.com/dennis-tra/antares/pkg/maxmind"
-	"github.com/dennis-tra/antares/pkg/models"
 )
 
-type ProviderProbe struct {
+type PinProbe struct {
 	host       host.Host
 	dbc        *db.Client
 	mmc        *maxmind.Client
@@ -42,13 +36,13 @@ type ProviderProbe struct {
 	dht        *kaddht.IpfsDHT
 	bstore     blockstore.Blockstore
 	tracer     *Tracer
-	target     Target
+	target     PinTarget
 	probeCount int64
 	trackCount int64
 	done       chan struct{}
 }
 
-func (p *ProviderProbe) run(ctx context.Context) {
+func (p *PinProbe) run(ctx context.Context) {
 	defer close(p.done)
 
 	ctx, err := tag.New(ctx, tag.Insert(metrics.KeyTargetName, p.target.Name()), tag.Insert(metrics.KeyTargetType, p.target.Type()))
@@ -85,7 +79,7 @@ func (p *ProviderProbe) run(ctx context.Context) {
 	}
 }
 
-func (p *ProviderProbe) probeTarget(ctx context.Context) error {
+func (p *PinProbe) probeTarget(ctx context.Context) error {
 	p.probeCount += 1
 	stats.Record(ctx, metrics.ProbeCount.M(p.probeCount))
 
@@ -115,18 +109,11 @@ func (p *ProviderProbe) probeTarget(ctx context.Context) error {
 		bo := p.target.Backoff(tCtx)
 
 		if err = backoff.RetryNotify(op, bo, p.notify); err != nil && !utils.IsContextErr(err) {
-			logEntry.Infoln("ProviderProbe operation failed")
+			logEntry.Infoln("Probe operation failed")
 			cancel()
 		}
 	}()
-	defer func() {
-		op := backoffWrap(tCtx, block.Cid(), p.target.CleanUp)
-		bo := p.target.Backoff(ctx)
-
-		if err := backoff.Retry(op, bo); err != nil && !utils.IsContextErr(err) {
-			logEntry.WithError(err).Warnln("Error cleaning up resources")
-		}
-	}()
+	defer cleanupProbe(tCtx, logEntry, p.target, block.Cid())
 
 	select {
 	case peerID := <-chPeerID:
@@ -137,15 +124,15 @@ func (p *ProviderProbe) probeTarget(ctx context.Context) error {
 	}
 }
 
-func (p *ProviderProbe) notify(err error, dur time.Duration) {
+func (p *PinProbe) notify(err error, dur time.Duration) {
 	p.logEntry().WithError(err).WithField("dur", dur).Debugln("Probe operation failed")
 }
 
-func (p *ProviderProbe) logEntry() *log.Entry {
+func (p *PinProbe) logEntry() *log.Entry {
 	return log.WithField("type", p.target.Type()).WithField("name", p.target.Name())
 }
 
-func (p *ProviderProbe) generateContent(ctx context.Context) (*blocks.BasicBlock, func(), error) {
+func (p *PinProbe) generateContent(ctx context.Context) (*blocks.BasicBlock, func(), error) {
 	pl, err := NewPayload(p.config.PrivKey)
 	if err != nil {
 		return nil, nil, errors.Wrap(err, "new payload data")
@@ -173,7 +160,7 @@ func (p *ProviderProbe) generateContent(ctx context.Context) (*blocks.BasicBlock
 	}, nil
 }
 
-func (p *ProviderProbe) trackPeer(ctx context.Context, peerID peer.ID) error {
+func (p *PinProbe) trackPeer(ctx context.Context, peerID peer.ID) error {
 	p.trackCount += 1
 	stats.Record(ctx, metrics.TrackCount.M(p.trackCount))
 
@@ -238,103 +225,10 @@ func (p *ProviderProbe) trackPeer(ctx context.Context, peerID peer.ID) error {
 	sort.Strings(continents)
 	sort.Slice(asns, func(i, j int) bool { return asns[i] < asns[j] })
 
-	if p.config.Database.DryRun {
-		p.logEntry().Infoln("Skipping database interaction due to --dry-run flag")
-
-		p.logEntry().Infoln("Tracked the following peer:")
-		p.logEntry().Infoln("  PeerID", peerID.String())
-		p.logEntry().Infoln("  AgentVersion", agentVersion)
-		p.logEntry().Infoln("  Protocols", protocols)
-		for i, protocol := range protocols {
-			p.logEntry().Infof("    [%d] %s\n", i, protocol)
-		}
-		p.logEntry().Infoln("  MultiAddresses", maddrStrs)
-		for i, maddrStr := range maddrStrs {
-			p.logEntry().Infof("    [%d] %s\n", i, maddrStr)
-		}
-		p.logEntry().Infoln("  IPAddresses", ipAddresses)
-		for i, ipAddress := range ipAddresses {
-			p.logEntry().Infof("    [%d] %s\n", i, ipAddress)
-		}
-		p.logEntry().Infoln("  Countries", countries)
-		p.logEntry().Infoln("  Continents", continents)
-		p.logEntry().Infoln("  ASNs", asns)
-		p.logEntry().Infoln("  TargetType", p.target.Type())
-		p.logEntry().Infoln("  TargetName", p.target.Name())
-
-		return nil
-	}
-
-	txn, err := p.dbc.BeginTx(ctx, nil)
-	if err != nil {
-		return errors.Wrap(err, "begin txn")
-	}
-	defer func() {
-		if err = txn.Rollback(); err != nil && err != sql.ErrTxDone {
-			log.WithError(err).Warnln("Error rolling back transaction")
-		}
-	}()
-
-	dbPeer, err := models.Peers(qm.Expr(
-		models.PeerWhere.MultiHash.EQ(peerID.String()),
-		models.PeerWhere.TargetName.EQ(p.target.Name()),
-	)).One(ctx, txn)
-	if err != nil && !errors.Is(err, sql.ErrNoRows) {
-		return errors.Wrap(err, "query peer from db")
-	}
-
-	if dbPeer == nil {
-		dbPeer = &models.Peer{
-			MultiHash:      peerID.String(),
-			AgentVersion:   null.NewString(agentVersion, agentVersion != ""),
-			Protocols:      protocols,
-			MultiAddresses: maddrStrs,
-			IPAddresses:    ipAddresses,
-			Countries:      countries,
-			Continents:     continents,
-			Asns:           asns,
-			TargetType:     p.target.Type(),
-			TargetName:     p.target.Name(),
-			LastSeenAt:     time.Now(),
-		}
-		if err = dbPeer.Insert(ctx, txn, boil.Infer()); err != nil {
-			return errors.Wrap(err, "insert db peer")
-		}
-	} else {
-		if agentVersion != "" {
-			dbPeer.AgentVersion = null.StringFrom(agentVersion)
-		}
-		if len(protocols) != 0 {
-			dbPeer.Protocols = protocols
-		}
-		if len(maddrStrs) != 0 {
-			dbPeer.MultiAddresses = maddrStrs
-		}
-		if len(ipAddresses) != 0 {
-			dbPeer.IPAddresses = ipAddresses
-		}
-		if len(countries) != 0 {
-			dbPeer.Countries = countries
-		}
-		if len(continents) != 0 {
-			dbPeer.Continents = continents
-		}
-		if len(asns) != 0 {
-			dbPeer.Asns = asns
-		}
-		dbPeer.LastSeenAt = time.Now()
-		if _, err = dbPeer.Update(ctx, txn, boil.Infer()); err != nil {
-			return errors.Wrap(err, "insert db peer")
-		}
-	}
-
-	if err = txn.Commit(); err != nil {
-		return errors.Wrap(err, "commit txn")
-	}
-
-	return nil
+	return insertModel(ctx, p.config.Database.DryRun, p.dbc, p.logEntry(), protocols, agentVersion, peerID,
+		ipAddresses, maddrStrs, countries, continents, asns, p.target.Type(), p.target.Name())
 }
 
-func (p *ProviderProbe) wait() {
+func (p *PinProbe) wait() {
 	<-p.done
 }

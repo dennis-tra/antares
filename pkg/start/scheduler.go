@@ -24,7 +24,7 @@ import (
 // The Scheduler is responsible for the initialization of Targets and Probes. Targets are entities like gateways
 // or pinning services. Probes can be configured with a specific Target and carry out the publication of content and
 // later the request through the Target. After all targets are initialized from the configuration, they get assigned
-// a ProviderProbe. These probes are then instructed to start doing their thing - which means, announcing CIDs to the DHT and
+// a PinProbe. These probes are then instructed to start doing their thing - which means, announcing CIDs to the DHT and
 // then requesting it through the associated target.
 type Scheduler struct {
 	// The libp2p node that's used to announce CIDs to the DHT and handle the Bitswap exchange of the data. The Bitswap
@@ -52,7 +52,7 @@ type Scheduler struct {
 	bstore blockstore.Blockstore
 
 	// A list of Targets to probe.
-	targets []Target
+	targets []PinTarget
 }
 
 // NewScheduler initializes a new libp2p host with the given configuration handles to a persistent storage and Maxmind
@@ -114,9 +114,9 @@ func NewScheduler(ctx context.Context, conf *config.Config, dbc *db.Client, mmc 
 // A Target is just the entity that we are probing to detect their PeerIDs and can be gateways or pinning services.
 // It always adds a dummy target. For each entry in the `Gateways` and `PinningServices` list it also
 // creates a corresponding target.
-func initTargets(h host.Host, conf *config.Config) ([]Target, error) {
+func initTargets(h host.Host, conf *config.Config) ([]PinTarget, error) {
 	// Always add the dummy target to detect peers that are proactively
-	targets := []Target{NewDummyTarget()}
+	targets := []PinTarget{NewDummyTarget()}
 
 	// Add all configured gateways
 	for _, gw := range conf.Gateways {
@@ -174,8 +174,8 @@ func (s *Scheduler) StartProbes(ctx context.Context) error {
 	return nil
 }
 
-func (s *Scheduler) newProbe(target Target) *ProviderProbe {
-	return &ProviderProbe{
+func (s *Scheduler) newProbe(target PinTarget) *PinProbe {
+	return &PinProbe{
 		host:   s.host,
 		dbc:    s.dbc,
 		mmc:    s.mmc,

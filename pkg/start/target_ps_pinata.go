@@ -27,7 +27,7 @@ type Pinata struct {
 	auth string
 }
 
-func NewPinata(h host.Host, auth string) (Target, error) {
+func NewPinata(h host.Host, auth string) (PinTarget, error) {
 	return &Pinata{h: h, auth: auth}, nil
 }
 

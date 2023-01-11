@@ -24,7 +24,7 @@ type Infura struct {
 	password string
 }
 
-func NewInfura(h host.Host, auth string) (Target, error) {
+func NewInfura(h host.Host, auth string) (PinTarget, error) {
 	parts := strings.Split(auth, ",")
 	if len(parts) != 2 {
 		return nil, fmt.Errorf("malformed infura credentials")
