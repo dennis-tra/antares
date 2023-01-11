@@ -24,7 +24,7 @@ import (
 // The Scheduler is responsible for the initialization of Targets and Probes. Targets are entities like gateways
 // or pinning services. Probes can be configured with a specific Target and carry out the publication of content and
 // later the request through the Target. After all targets are initialized from the configuration, they get assigned
-// a Probe. These probes are then instructed to start doing their thing - which means, announcing CIDs to the DHT and
+// a ProviderProbe. These probes are then instructed to start doing their thing - which means, announcing CIDs to the DHT and
 // then requesting it through the associated target.
 type Scheduler struct {
 	// The libp2p node that's used to announce CIDs to the DHT and handle the Bitswap exchange of the data. The Bitswap
@@ -153,7 +153,7 @@ func (s *Scheduler) StartProbes(ctx context.Context) error {
 	}
 
 	// Start all probes
-	var probes []*Probe
+	var probes []Probe
 	for _, target := range s.targets {
 		log.Infof("Starting %s probe %s...", target.Type(), target.Name())
 		p := s.newProbe(target)
@@ -167,15 +167,15 @@ func (s *Scheduler) StartProbes(ctx context.Context) error {
 
 	// The user wanted to stop the program, wait until all probes have gracefully stopped
 	for _, p := range probes {
-		log.WithField("type", p.target.Type()).WithField("name", p.target.Name()).Infoln("Waiting for probe to stop")
-		<-p.done
+		p.logEntry().Infoln("Waiting for probe to stop")
+		p.wait()
 	}
 
 	return nil
 }
 
-func (s *Scheduler) newProbe(target Target) *Probe {
-	return &Probe{
+func (s *Scheduler) newProbe(target Target) *ProviderProbe {
+	return &ProviderProbe{
 		host:   s.host,
 		dbc:    s.dbc,
 		mmc:    s.mmc,
