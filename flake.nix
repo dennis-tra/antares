@@ -6,7 +6,9 @@
     flake = false;
   };
 
-  outputs = { self, nixpkgs, ... }:
+  inputs.devenv.url = "github:cachix/devenv";
+
+  outputs = { self, nixpkgs, devenv, ... }@inputs:
     let
       version = "${nixpkgs.lib.substring 0 8 self.lastModifiedDate}-${
           self.shortRev or "dirty"
@@ -45,14 +47,6 @@
             # https://github.com/dennis-tra/antares/issues/3
             doCheck = false;
           }) { };
-
-        antares-dev-shell = final.callPackage
-          ({ lib, stdenv, mkShell, go, go-migrate, gnumake }:
-            mkShell {
-              pname = "antares-dev-shell";
-              version = version;
-              buildInputs = [ go go-migrate gnumake ];
-            }) { };
       };
       overlays.default = self.overlays.antares;
 
@@ -70,13 +64,44 @@
         default = self.apps.${system}.antares;
       });
 
-      devShells = forAllSystems (system: {
-        inherit (nixpkgsFor.${system}) antares-dev-shell;
-        default = self.devShells.${system}.antares-dev-shell;
-      });
+      devShells = forAllSystems (system:
+        let pkgs = nixpkgsFor.${system};
+        in {
+          devenv = devenv.lib.mkShell {
+            inherit inputs pkgs;
+            modules = [
+              {
+                packages = with pkgs; [ go-migrate gnumake ];
+                languages.go.enable = true;
+                pre-commit.hooks.actionlint.enable = true;
+                pre-commit.hooks.nixfmt.enable = true;
+                pre-commit.hooks.govet.enable = true;
+              }
+              {
+                services.postgres.enable = true;
+                services.postgres.listen_addresses = "127.0.0.1";
+                services.postgres.initdbArgs = [ "-U antares" ];
+                services.postgres.initialDatabases = [{ name = "antares"; }];
+              }
+              ({ config, ... }: {
+                env.ANTARES_DATABASE_HOST = config.env.PGHOST;
+                env.ANTARES_DATABASE_POST = config.env.PGPORT;
+                env.ANTARES_DATABASE_NAME = "antares";
+                env.ANTARES_DATABASE_USER = "antares";
+
+                process.implementation = "hivemind";
+              })
+            ];
+          };
+          default = self.devShells.${system}.devenv;
+        });
 
       legacyPackages = forAllSystems (system: nixpkgsFor.${system});
 
+      checks = forAllSystems (system: {
+        devenv = self.devShells.${system}.devenv;
+        antares = self.packages.${system}.antares;
+      });
     };
 
   nixConfig = {
