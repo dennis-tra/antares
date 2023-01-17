@@ -64,13 +64,15 @@ func (t *Web3) CleanUp(ctx context.Context, c cid.Cid) error {
 func (t *Web3) UploadContent(ctx context.Context, block *blocks.BasicBlock) error {
 	logEntry := t.logEntry().WithField("cid", block.Cid())
 	logEntry.Info("uploading content")
+	println(string(block.RawData()))
 
 	req, err := http.NewRequest(http.MethodPost, "https://api.web3.storage/upload", bytes.NewBuffer(block.RawData()))
 	if err != nil {
 		return errors.Wrap(err, "new request")
 	}
 	req.Header.Add("Authorization", "Bearer "+t.auth)
-	req.Header.Add("Content-Type", "application/octet-stream")
+	req.Header.Add("Content-Type", "application/json")
+	req.Header.Add("X-NAME", "antares-test-file")
 
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {

@@ -10,6 +10,8 @@ import (
 	"github.com/dennis-tra/antares/pkg/metrics"
 	"github.com/dennis-tra/antares/pkg/utils"
 	blocks "github.com/ipfs/go-block-format"
+	"github.com/ipfs/go-cid"
+	ipfsutils "github.com/ipfs/go-ipfs-util"
 	kaddht "github.com/libp2p/go-libp2p-kad-dht"
 	"github.com/libp2p/go-libp2p/core/host"
 	"github.com/libp2p/go-libp2p/core/peer"
@@ -77,32 +79,44 @@ func (u *UploadProbe) probeTarget(ctx context.Context) error {
 	stats.Record(ctx, metrics.ProbeCount.M(u.probeCount))
 
 	block, err := u.generateContent(ctx)
-	if err == nil {
-		return errors.Wrap(err, "upload new content")
+	if err != nil {
+		return errors.Wrap(err, "generate content")
 	}
+	u.logEntry().Infoln("foo")
 
 	tCtx, cancel := context.WithTimeout(ctx, u.target.Timeout())
-	chProvider := u.dht.FindProvidersAsync(tCtx, block.Cid(), 0)
 	logEntry := u.logEntry().WithField("cid", block.Cid().String())
 
 	defer cancel()
 
-	go func() {
-		logEntry.Infoln("Starting probe operation")
+	//go func() {
+	logEntry.Infoln("Starting probe operation")
 
-		op := func() error {
-			return u.target.UploadContent(tCtx, block)
-		}
-		bo := u.target.Backoff(tCtx)
+	op := func() error {
+		return u.target.UploadContent(tCtx, block)
+	}
+	bo := u.target.Backoff(tCtx)
 
-		if err = backoff.RetryNotify(op, bo, u.notify); err != nil && !utils.IsContextErr(err) {
-			logEntry.Infoln("Probe operation failed")
-			cancel()
-		}
-	}()
+	if err = backoff.RetryNotify(op, bo, u.notify); err != nil && !utils.IsContextErr(err) {
+		logEntry.Infoln("Probe operation failed")
+		cancel()
+	}
+	//}()
 	defer cleanupProbe(tCtx, logEntry, u.target, block.Cid())
 
-	for {
+	//chProvider := u.dht.FindProvidersAsync(tCtx, block.Cid(), 10)
+	addresses, err := u.dht.FindProviders(tCtx, block.Cid())
+	if err != nil {
+		return errors.Wrap(err, "find providers")
+	}
+
+	for _, addr := range addresses {
+		logEntry.WithField("addr", addr).Infoln("Found provider")
+		u.trackProvider(tCtx, addr)
+	}
+	return nil
+
+	/*for {
 		select {
 		case peer := <-chProvider:
 			if err := u.trackProvider(ctx, peer); err != nil {
@@ -111,7 +125,7 @@ func (u *UploadProbe) probeTarget(ctx context.Context) error {
 		case <-tCtx.Done():
 			return nil
 		}
-	}
+	}*/
 }
 
 func (u *UploadProbe) generateContent(ctx context.Context) (*blocks.BasicBlock, error) {
@@ -120,15 +134,20 @@ func (u *UploadProbe) generateContent(ctx context.Context) (*blocks.BasicBlock, 
 	if err != nil {
 		return nil, errors.Wrap(err, "new payload data")
 	}
-	data, err := payload.Bytes()
+	data, err := payload.JsonBytes()
 	if err != nil {
 		return nil, errors.Wrap(err, "payload bytes")
 	}
 
-	return blocks.NewBlock(data), nil
+	//return blocks.NewBlock(data), nil
+	return blocks.NewBlockWithCid(data, cid.NewCidV1(0x55, ipfsutils.Hash(data)))
 }
 
 func (u *UploadProbe) trackProvider(ctx context.Context, provider peer.AddrInfo) error {
+	if provider.ID == "" {
+		u.logEntry().Warnln("Provider ID is empty")
+		return nil
+	}
 	// TODO: go routine?
 	u.trackCount += 1
 	stats.Record(ctx, metrics.TrackCount.M(u.trackCount))
