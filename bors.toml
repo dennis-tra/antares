@@ -1,0 +1,5 @@
+status = [ "Nix Build (ubuntu-latest)" ]
+block_labels = [ "S-do-not-merge-yet" ]
+cut_body_after = "<details>"
+timeout_sec = 36000 # ten hours
+delete_merged_branches = true
