@@ -108,14 +108,25 @@ func (u *UploadProbe) probeTarget(ctx context.Context) error {
 	chProvider := u.dht.FindProvidersAsync(tCtx, block.Cid(), 0)
 	logEntry.Infoln("Finding providers for CID")
 
+	var foundProviders = false
 	for {
 		select {
 		case peer, more := <-chProvider:
-			if !more {
+			// Restart provider search if channel is closed and no providers were found yetg
+			if !more && !foundProviders {
 				logEntry.Debugln("Restarting Provider search")
 				chProvider = u.dht.FindProvidersAsync(tCtx, block.Cid(), 0)
 				continue
 			}
+
+			// check we have a valid peer
+			if peer.ID == "" {
+				logEntry.Warnln("Provider ID is empty")
+				continue
+			}
+
+			foundProviders = true
+
 			if err := u.trackProvider(ctx, peer); err != nil {
 				return err
 			}
@@ -140,11 +151,6 @@ func (u *UploadProbe) generateContent(ctx context.Context) (*blocks.BasicBlock, 
 }
 
 func (u *UploadProbe) trackProvider(ctx context.Context, provider peer.AddrInfo) error {
-	if provider.ID == "" {
-		u.logEntry().Warnln("Provider ID is empty")
-		return nil
-	}
-
 	u.trackCount += 1
 	stats.Record(ctx, metrics.TrackCount.M(u.trackCount))
 
