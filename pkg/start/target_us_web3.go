@@ -64,7 +64,6 @@ func (t *Web3) CleanUp(ctx context.Context, c cid.Cid) error {
 func (t *Web3) UploadContent(ctx context.Context, block *blocks.BasicBlock) error {
 	logEntry := t.logEntry().WithField("cid", block.Cid())
 	logEntry.Info("uploading content")
-	println(string(block.RawData()))
 
 	req, err := http.NewRequest(http.MethodPost, "https://api.web3.storage/upload", bytes.NewBuffer(block.RawData()))
 	if err != nil {
@@ -97,7 +96,7 @@ func (t *Web3) UploadContent(ctx context.Context, block *blocks.BasicBlock) erro
 	if !block.Cid().Equals(cid) {
 		logEntry.Warnf("Cid mismatch: %s != %s", block.Cid().String(), cid.String())
 	} else {
-		logEntry.Infof("Uploaded CID: %s", block.Cid().String())
+		logEntry.Infof("Uploaded to web3")
 	}
 
 	return nil

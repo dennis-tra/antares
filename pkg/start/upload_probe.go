@@ -17,6 +17,7 @@ import (
 	"github.com/libp2p/go-libp2p/core/peer"
 	ma "github.com/multiformats/go-multiaddr"
 	manet "github.com/multiformats/go-multiaddr/net"
+	"github.com/multiformats/go-multicodec"
 	"github.com/pkg/errors"
 	log "github.com/sirupsen/logrus"
 	"go.opencensus.io/stats"
@@ -89,43 +90,39 @@ func (u *UploadProbe) probeTarget(ctx context.Context) error {
 
 	defer cancel()
 
-	//go func() {
-	logEntry.Infoln("Starting probe operation")
+	go func() {
+		logEntry.Infoln("Starting probe operation")
 
-	op := func() error {
-		return u.target.UploadContent(tCtx, block)
-	}
-	bo := u.target.Backoff(tCtx)
+		op := func() error {
+			return u.target.UploadContent(tCtx, block)
+		}
+		bo := u.target.Backoff(tCtx)
 
-	if err = backoff.RetryNotify(op, bo, u.notify); err != nil && !utils.IsContextErr(err) {
-		logEntry.Infoln("Probe operation failed")
-		cancel()
-	}
-	//}()
+		if err = backoff.RetryNotify(op, bo, u.notify); err != nil && !utils.IsContextErr(err) {
+			logEntry.Infoln("Probe operation failed")
+			cancel()
+		}
+	}()
 	defer cleanupProbe(tCtx, logEntry, u.target, block.Cid())
 
-	//chProvider := u.dht.FindProvidersAsync(tCtx, block.Cid(), 10)
-	addresses, err := u.dht.FindProviders(tCtx, block.Cid())
-	if err != nil {
-		return errors.Wrap(err, "find providers")
-	}
+	chProvider := u.dht.FindProvidersAsync(tCtx, block.Cid(), 0)
+	logEntry.Infoln("Finding providers for CID")
 
-	for _, addr := range addresses {
-		logEntry.WithField("addr", addr).Infoln("Found provider")
-		u.trackProvider(tCtx, addr)
-	}
-	return nil
-
-	/*for {
+	for {
 		select {
-		case peer := <-chProvider:
+		case peer, more := <-chProvider:
+			if !more {
+				logEntry.Debugln("Restarting Provider search")
+				chProvider = u.dht.FindProvidersAsync(tCtx, block.Cid(), 0)
+				continue
+			}
 			if err := u.trackProvider(ctx, peer); err != nil {
 				return err
 			}
 		case <-tCtx.Done():
 			return nil
 		}
-	}*/
+	}
 }
 
 func (u *UploadProbe) generateContent(ctx context.Context) (*blocks.BasicBlock, error) {
@@ -139,8 +136,7 @@ func (u *UploadProbe) generateContent(ctx context.Context) (*blocks.BasicBlock, 
 		return nil, errors.Wrap(err, "payload bytes")
 	}
 
-	//return blocks.NewBlock(data), nil
-	return blocks.NewBlockWithCid(data, cid.NewCidV1(0x55, ipfsutils.Hash(data)))
+	return blocks.NewBlockWithCid(data, cid.NewCidV1(uint64(multicodec.Raw), ipfsutils.Hash(data)))
 }
 
 func (u *UploadProbe) trackProvider(ctx context.Context, provider peer.AddrInfo) error {
@@ -148,13 +144,14 @@ func (u *UploadProbe) trackProvider(ctx context.Context, provider peer.AddrInfo)
 		u.logEntry().Warnln("Provider ID is empty")
 		return nil
 	}
-	// TODO: go routine?
+
 	u.trackCount += 1
 	stats.Record(ctx, metrics.TrackCount.M(u.trackCount))
 
+	// Ensure provider is in peerstore
 	err := u.host.Connect(ctx, provider)
 	if err != nil {
-		return errors.Wrap(err, "connect to provider")
+		u.logEntry().WithError(err).WithField("peer", provider.ID).Infof("Error connecting to provider")
 	}
 
 	ps := u.host.Peerstore()
