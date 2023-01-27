@@ -1,0 +1,38 @@
+#+title: Upload Target
+#+author: Finn Behrens
+#+date: 2023-01-27
+
+* Configuration
+Configuration is done via the `UploadServices` array in the `config.json` file. Each entry in the array is a JSON object with the following fields:
+- `Target` - The name of the target. This is used to identify the target in the `Upload` function. (Value in parentheses in the following list)
+- `Authorization` - The authorization to use for the upload.
+
+** Web3.storage (web3)
+Create a JWT from the website for authorization.
+
+* Internal documentation
+** Uploading the test file
+The `UploadTarget` interface requires the function called with a `blocks.BasicBlock` to upload the test file.
+#+begin_src go
+type UploadTarget interface {
+  Target
+  UploadContent(ctx context.Context, block *blocks.BasicBlock) error
+}
+#+end_src
+
+This function is expected to check that the `CID` returned by the upload matches the `CID` from the block. In this case the block will use a CIDv1 as most upload providers return a v1.
+
+** Probing target
+The probe works by looking in the DHT provided by the scheduler for the CID of the block given to the `UploadContent` function (this is why `UploadContent` is supposed to compare CIDs).
+As the query inside the dht (`dht.FindProvidersAsync`) may finish before the cid has been submitted to the dht, the query is repeated until either the target timeout is reached or at least one entry has been found.
+
+Once a provider has been found, the probe tries to connect to the provider to get the protocol and agent version (this is allowed to fail as this is optional information).
+
+** Clean up
+As some upload providers do not provide an api to delete files, the cleanup process is part of the `CleanupTarget`. This target is optional, and only if implemented will the `CleanUp' function be called.
+#+begin_src go
+type CleanupTarget interface {
+  target
+  CleanUp(ctx context.Context, c cid.Cid) error
+}
+#+end_src
