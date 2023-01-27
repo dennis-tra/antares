@@ -53,10 +53,15 @@ func NewPayload(key crypto.PrivKey) (*Payload, error) {
 // Bytes returns the json representation of the data embedded into a
 // DAG node so that IPFS can make sense of the data.
 func (p *Payload) Bytes() ([]byte, error) {
-	dat, err := json.Marshal(p)
+	dat, err := p.JsonBytes()
 	if err != nil {
 		return nil, errors.Wrap(err, "new probe data")
 	}
 
 	return dag.NodeWithData(ft.FilePBData(dat, uint64(len(dat)))).Marshal()
+}
+
+// JsonBytes returns the json representation of the data.
+func (p *Payload) JsonBytes() ([]byte, error) {
+	return json.Marshal(p)
 }

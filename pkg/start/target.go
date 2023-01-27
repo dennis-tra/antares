@@ -2,6 +2,7 @@ package start
 
 import (
 	"context"
+	blocks "github.com/ipfs/go-block-format"
 	"time"
 
 	"github.com/cenkalti/backoff/v4"
@@ -9,19 +10,37 @@ import (
 	"github.com/libp2p/go-libp2p/core/host"
 )
 
-type PinningServiceTargetConstructor = func(host host.Host, auth string) (Target, error)
+type PinningServiceTargetConstructor = func(host host.Host, auth string) (PinTarget, error)
 
 var PinningServiceTargetConstructors = map[string]PinningServiceTargetConstructor{
 	InfuraTargetName: NewInfura,
 	PinataTargetName: NewPinata,
 }
 
+type UploadServiceTargetConstructor = func(host host.Host, auth string) (UploadTarget, error)
+
+var UploadServiceTargetConstructors = map[string]UploadServiceTargetConstructor{
+	Web3TargetName: NewWeb3,
+}
+
 type Target interface {
-	Operation(ctx context.Context, c cid.Cid) error
 	Backoff(ctx context.Context) backoff.BackOff
-	CleanUp(ctx context.Context, c cid.Cid) error
 	Timeout() time.Duration
 	Rate() time.Duration
 	Name() string
 	Type() string
+}
+type PinTarget interface {
+	Target
+	Operation(ctx context.Context, c cid.Cid) error
+}
+
+type CleanupTarget interface {
+	Target
+	CleanUp(ctx context.Context, c cid.Cid) error
+}
+
+type UploadTarget interface {
+	Target
+	UploadContent(ctx context.Context, block *blocks.BasicBlock) error
 }

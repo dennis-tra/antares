@@ -27,11 +27,11 @@ type Pinata struct {
 	auth string
 }
 
-func NewPinata(h host.Host, auth string) (Target, error) {
+func NewPinata(h host.Host, auth string) (PinTarget, error) {
 	return &Pinata{h: h, auth: auth}, nil
 }
 
-var _ Target = (*Pinata)(nil)
+var _ PinTarget = (*Pinata)(nil)
 
 func (p *Pinata) Operation(ctx context.Context, c cid.Cid) error {
 	logEntry := p.logEntry().WithField("cid", c)
