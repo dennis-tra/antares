@@ -1,0 +1,25 @@
+#+title: Pinning Target
+#+author: Finn Behrens
+#+date: 2023-01-27
+
+* Configuration
+Configuration is done via the `PinningServices` array in the `config.json` file. Each entry in the array is a JSON object with the following fields
+- `Target` - The name of the target. This is used to identify the target in the `Operation` function. (Value in parentheses in the following list)
+- `Authorization` - The authorization to use for the pin service.
+
+** Pinata
+For pinata, grab a JWT that has permission to pin and unpin CIDs and use it as Authorisation.
+
+** Infura
+For Infura, grab the project ID and API-Key secret from their website. Then concatenate them with the , in between: `PROJECT_ID,API_KEY_SECRET`.
+
+* Internal documentation
+** Providing the file
+The test file is provided to the dht as a separate node as a provider. Therefore the node must be reachable for the BitSwap protocol to pass the block to the pinning service.
+
+** Pinning the block
+The target's `Operation` function is called to pin the block. This takes the CID of the block and calls the pinning service.
+The pinning service then queries the DHT for the block, and since this block is randomly generated and contains a signed element, only the own node provides it at that time. So the pinning service connects to the node via BitSwap and leaves the protocol and agent version.
+
+** Cleaning up
+As with Upload Targets, cleaning up is done via the `CleanupTarget` interface. However, most pinning services provide an unpin api, so this is usually implemented.
